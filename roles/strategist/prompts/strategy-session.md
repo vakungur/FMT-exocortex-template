@@ -6,7 +6,7 @@
 - **HUB (личные планы):** {{WORKSPACE_DIR}}/{{GOVERNANCE_REPO}}/current/
 - **Документы стратегии:** {{WORKSPACE_DIR}}/{{GOVERNANCE_REPO}}/docs/ (Strategy.md, Dissatisfactions.md, Session Agenda.md)
 - **Inbox:** {{WORKSPACE_DIR}}/{{GOVERNANCE_REPO}}/inbox/
-- **Активные РП:** `bash {{WORKSPACE_DIR}}/scripts/active-wp-sweep.sh` (агрегатор по `{{GOVERNANCE_REPO}}/inbox/WP-*.md` + git-активность 7д)
+- **SPOKE (планы репо):** {{WORKSPACE_DIR}}/*/WORKPLAN.md
 - **MEMORY:** ~/.claude/projects/{{CLAUDE_PROJECT_SLUG}}/memory/MEMORY.md
 
 ## Предусловие
@@ -64,9 +64,9 @@
 
 > Реализует Фазу 2b метода `PD.METHOD.008` (стратегирование). Алгоритм рекомендации Стратегом — `PD.METHOD.018` § Механизм рекомендации Стратегом. Различение C_vis vs C_act — `PD.FORM.091 §6.1`.
 
-1. **Прочитай трекер:** `{{WORKSPACE_DIR}}/{{GOVERNANCE_REPO}}/docs/Caliber-artifacts-tracker.md` (если файла нет — создай из шаблона `{{WORKSPACE_DIR}}/FMT-exocortex-template/templates/strategy-skeleton/docs/Caliber-artifacts-tracker.md`)
+1. **Прочитай трекер:** `{{WORKSPACE_DIR}}/DS-strategy/docs/Caliber-artifacts-tracker.md` (если файла нет — создай из шаблона `{{WORKSPACE_DIR}}/FMT-exocortex-template/templates/strategy-skeleton/docs/Caliber-artifacts-tracker.md`)
 2. **Измерь C_vis:** max системный уровень в `Dissatisfactions.md` с фильтром «≥2 НЭП на уровне» (одиночный НЭП на высоком уровне = сигнал, не калибр видения)
-3. **Измерь C_act:** max уровень охвата (`PD.FORM.090`) с lifework-документом, действующим ≥6 мес. Читай из `{{WORKSPACE_DIR}}/{{GOVERNANCE_REPO}}/Lifework/` (там живут личные документы). Если папки нет или пуста — C_act=0, рекомендуй создать Личный устав (уровень 1) первым, взяв шаблон из `PACK-personal/.../lifework-templates/lifework-self-charter-template.md`
+3. **Измерь C_act:** max уровень охвата (`PD.FORM.090`) с lifework-документом, действующим ≥6 мес. Читай из `{{WORKSPACE_DIR}}/DS-strategy/Lifework/` (там живут личные документы). Если папки нет или пуста — C_act=0, рекомендуй создать Личный устав (уровень 1) первым, взяв шаблон из `PACK-personal/.../lifework-templates/lifework-self-charter-template.md`
 4. **Объяви разрыв:** «C_vis=N, C_act=M, зона роста = [M+1..N]»
 5. **Проверь минимально полный пакет уровня C_act** (`PD.FORM.090 §6`): все ли инварианты уровней 1..C_act присутствуют? Поломки внизу → рекомендация «догнать вниз», STOP здесь (приоритет, поломка наверху = обрыв снизу)
 6. **Двойной gate для подъёма:** активируй рекомендацию уровня C_act+1 ТОЛЬКО если: (а) пакет C_act полный + действует ≥6 мес; (б) ступень мастерства ≥3 (`PD.FORM.080`). Иначе фокус на текущем уровне, не предлагать рост
@@ -97,10 +97,11 @@
 
 - Пользователь подтверждает план
 - Смени `status: draft` → `status: confirmed` в WeekPlan
-- **ОБЯЗАТЕЛЬНО:** Обнови MEMORY.md → секция «РП текущей недели» через `bash {{WORKSPACE_DIR}}/scripts/memory-active-wp-update.sh` (single source — `{{GOVERNANCE_REPO}}/inbox/WP-*.md`)
+- Обнови WORKPLAN.md в целевых репо (обратная синхронизация)
+- **ОБЯЗАТЕЛЬНО:** Обнови MEMORY.md → секция «РП текущей недели» (актуальный список РП + статусы)
 - **ОБЯЗАТЕЛЬНО:** Если добавлена работа, не отражённая в Strategy.md → обнови Strategy.md (приоритеты месяца, фазы, Q1 результаты)
 - **ОБЯЗАТЕЛЬНО:** Очисти обработанные из fleeting-notes.md и inbox/
 - **ОБЯЗАТЕЛЬНО:** Обратная синхронизация MAPSTRATEGIC.md — если элемент из MAPSTRATEGIC взят в работу (создан РП) → обнови статус фазы в `<repo>/MAPSTRATEGIC.md` (пометь как in-progress, добавь ссылку на РП). Если фаза завершена (РП done) → пометь как done.
 - Закоммить изменения в {{GOVERNANCE_REPO}} и затронутых репо
 
-**Результат:** утверждённый WeekPlan W{N} (`status: confirmed`), обновлённые Strategy.md, MEMORY.md, MAPSTRATEGIC.md, очищенный inbox.
+**Результат:** утверждённый WeekPlan W{N} (`status: confirmed`), обновлённые Strategy.md, WORKPLAN.md, MEMORY.md, MAPSTRATEGIC.md, очищенный inbox.
