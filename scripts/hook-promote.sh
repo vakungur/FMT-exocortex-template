@@ -58,6 +58,23 @@ if [[ -f "$VALIDATOR" ]]; then
     fi
 fi
 
+# Smoke-тест в изолированном env с шаблонными переменными
+echo "   smoke-test с шаблонным окружением..."
+smoke_result=0
+env -i \
+    HOME="/tmp/iwe-smoke-user" \
+    IWE="/tmp/iwe-smoke-user/IWE" \
+    IWE_GOVERNANCE_REPO="DS-strategy" \
+    PATH="/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin" \
+    bash "$tmp_file" --help > /dev/null 2>&1 || smoke_result=$?
+
+if [[ $smoke_result -eq 127 ]]; then
+    rm -rf "$tmp_dir"
+    echo "❌ Smoke-тест: exit 127 — хук не запускается в чужом окружении." >&2
+    exit 1
+fi
+echo "   smoke-test: OK (exit $smoke_result)"
+
 cp "$tmp_file" "$DEST"
 chmod +x "$DEST"
 rm -rf "$tmp_dir"
