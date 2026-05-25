@@ -11,6 +11,7 @@
 #   route-task.sh --tag  <routing-tag>  [--args "..."]   # flex: fallback to Sonnet on miss
 #   route-task.sh --list                                 # показать каталог
 #   route-task.sh --validate                             # проверить каталог
+#   route-task.sh --json                                 # machine-readable JSON output
 #
 # Exit: 0=OK, 1=error, 2=script_path not found, 3=unknown skill, 4=unsupported executor
 
@@ -20,40 +21,77 @@ IWE_DIR="${IWE_DIR:-$HOME/IWE}"
 GOV_REPO="${IWE_GOVERNANCE_REPO:-DS-strategy}"
 CATALOG="${IWE_EXECUTOR_CATALOG:-${IWE_DIR}/${GOV_REPO}/scripts/executor-catalog.yaml}"
 VALID_EXECUTORS=("script" "haiku" "sonnet" "opus" "mcp-direct")
-AUDIT_LOG="${IWE_ROUTER_AUDIT:-${IWE_DIR}/${GOV_REPO}/logs/pilot-audit.tsv}"
+AUDIT_LOG="${IWE_ROUTER_AUDIT:-${IWE_DIR}/${GOV_REPO}/logs/routing-path-distribution.tsv}"
+ERROR_LOG="${IWE_ROUTER_ERRORS:-${IWE_DIR}/${GOV_REPO}/logs/routing-errors.log}"
+JSON_MODE="false"
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-die() { echo "ERROR: $*" >&2; exit 1; }
+die() {
+    local msg="$1" code="${2:-1}"
+    if [[ "$JSON_MODE" == "true" ]]; then
+        printf '{"exec_result":"ERROR","error_code":%s,"message":"%s"}\n' "$code" "$msg"
+    else
+        echo "ERROR: $msg" >&2
+    fi
+    exit "$code"
+}
+
 warn() { echo "WARN: $*" >&2; }
 
 require_python() {
     if ! command -v python3 &>/dev/null; then
-        die "python3 not found — required for catalog lookup"
+        die "python3 not found — required for catalog lookup" 1
     fi
     if ! python3 -c "import yaml" &>/dev/null; then
-        die "PyYAML not found — required for catalog lookup (pip install pyyaml)"
+        die "PyYAML not found — required for catalog lookup (pip install pyyaml)" 1
     fi
 }
 
 require_catalog() {
     if [[ ! -f "$CATALOG" ]]; then
-        die "executor-catalog.yaml not found: $CATALOG"
+        die "executor-catalog.yaml not found: $CATALOG" 1
     fi
 }
 
 # ---------------------------------------------------------------------------
-# Audit log
+# Output formatting
+# ---------------------------------------------------------------------------
+
+emit_result() {
+    local skill="$1" executor="$2" result="$3" routing_path="$4"
+    if [[ "$JSON_MODE" == "true" ]]; then
+        printf '{"executor":"%s","routing_path":"%s","exec_result":"%s"}\n' \
+            "$executor" "$routing_path" "$result"
+    fi
+}
+
+emit_error() {
+    local skill="$1" result="$2" reason="$3"
+    local ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    if [[ "$JSON_MODE" == "true" ]]; then
+        printf '{"exec_result":"%s","skill":"%s","reason":"%s"}\n' \
+            "$result" "$skill" "$reason"
+    fi
+    # Always log to routing-errors.log
+    local err_dir
+    err_dir="$(dirname "$ERROR_LOG")"
+    [[ -d "$err_dir" ]] || mkdir -p "$err_dir"
+    printf "%s\t%s\t%s\t%s\n" "$ts" "$skill" "$result" "$reason" >> "$ERROR_LOG"
+}
+
+# ---------------------------------------------------------------------------
+# Audit log (routing-path-distribution)
 # ---------------------------------------------------------------------------
 
 log_audit() {
-    local ts="$1" skill="$2" executor="$3" llm_tokens="$4" exit_code="$5"
+    local ts="$1" tag="$2" executor="$3" result="$4"
     local audit_dir
     audit_dir="$(dirname "$AUDIT_LOG")"
     [[ -d "$audit_dir" ]] || mkdir -p "$audit_dir"
-    printf "%s\t%s\t%s\t%s\t%s\n" "$ts" "$skill" "$executor" "$llm_tokens" "$exit_code" >> "$AUDIT_LOG"
+    printf "%s\t%s\t%s\t%s\n" "$ts" "$tag" "$executor" "$result" >> "$AUDIT_LOG"
 }
 
 # ---------------------------------------------------------------------------
@@ -95,6 +133,7 @@ run_script() {
     local script_path="$2"
     local args="${3:-}"
     local allow_fallback="${4:-true}"
+    local routing_path="${5:-$skill_name → script}"
 
     # Resolve relative path from IWE_DIR
     if [[ "$script_path" != /* ]]; then
@@ -104,14 +143,16 @@ run_script() {
     if [[ ! -f "$script_path" ]]; then
         if [[ "$allow_fallback" == "false" ]]; then
             warn "script not found: $script_path (skill=$skill_name)"
-            log_audit "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$skill_name" "script" "-" "2"
+            emit_error "$skill_name" "EXEC_FAILED" "script_path not found: $script_path"
+            emit_result "$skill_name" "script" "EXEC_FAILED" "$routing_path"
             exit 2
         fi
         warn "script not found: $script_path (skill=$skill_name)"
         warn "Script may be aspirational (pending Ф12 implementation)."
         warn "Falling back to Haiku LLM executor."
         run_haiku "$skill_name" "$args"
-        log_audit "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$skill_name" "haiku" "-" "0"
+        log_audit "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$skill_name" "haiku" "OK"
+        emit_result "$skill_name" "haiku" "OK" "$skill_name → haiku (fallback)"
         return 0
     fi
 
@@ -119,14 +160,23 @@ run_script() {
         chmod +x "$script_path"
     fi
 
-    echo "[router] skill=$skill_name executor=script path=$script_path"
+    if [[ "$JSON_MODE" != "true" ]]; then
+        echo "[router] skill=$skill_name executor=script path=$script_path"
+    fi
     local script_exit=0
     if [[ -n "$args" ]]; then
         bash "$script_path" "$args" || script_exit=$?
     else
         bash "$script_path" || script_exit=$?
     fi
-    log_audit "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$skill_name" "script" "0" "$script_exit"
+    if [[ $script_exit -ne 0 ]]; then
+        emit_error "$skill_name" "EXEC_FAILED" "script exit $script_exit"
+        emit_result "$skill_name" "script" "EXEC_FAILED" "$routing_path"
+        log_audit "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$skill_name" "script" "EXEC_FAILED"
+    else
+        emit_result "$skill_name" "script" "OK" "$routing_path"
+        log_audit "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$skill_name" "script" "OK"
+    fi
     return $script_exit
 }
 
@@ -135,10 +185,10 @@ run_llm() {
     local model="$2"
     local args="${3:-}"
 
-    echo "[router] skill=$skill_name executor=llm model=$model"
-    # Claude Code dispatches to LLM — emit routing directive for the agent
-    # Format consumed by Claude Code's skill dispatcher
-    echo "ROUTE_TO_LLM skill=$skill_name model=$model args=$args"
+    if [[ "$JSON_MODE" != "true" ]]; then
+        echo "[router] skill=$skill_name executor=llm model=$model"
+        echo "ROUTE_TO_LLM skill=$skill_name model=$model args=$args"
+    fi
 }
 
 run_haiku()  { run_llm "$1" "claude-haiku-4-5-20251001" "${2:-}"; }
@@ -148,8 +198,10 @@ run_opus()   { run_llm "$1" "claude-opus-4-7"            "${2:-}"; }
 run_mcp_direct() {
     local skill_name="$1"
     local args="${2:-}"
-    echo "[router] skill=$skill_name executor=mcp-direct"
-    echo "ROUTE_TO_MCP skill=$skill_name args=$args"
+    if [[ "$JSON_MODE" != "true" ]]; then
+        echo "[router] skill=$skill_name executor=mcp-direct"
+        echo "ROUTE_TO_MCP skill=$skill_name args=$args"
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -161,6 +213,7 @@ dispatch_skill() {
     local args="${2:-}"
     local allow_fallback="${3:-true}"
     local ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    local routing_path="$skill_name → "
 
     local lookup_result lookup_exit
     lookup_result=$(lookup_skill "$skill_name") && lookup_exit=0 || lookup_exit=$?
@@ -168,12 +221,15 @@ dispatch_skill() {
         if [[ $lookup_exit -eq 3 ]]; then
             if [[ "$allow_fallback" == "false" ]]; then
                 warn "skill '$skill_name' not in catalog."
-                log_audit "$ts" "$skill_name" "unknown" "-" "3"
+                emit_error "$skill_name" "NO_MATCH" "skill not in catalog"
+                emit_result "$skill_name" "unknown" "NO_MATCH" "$skill_name → NO_MATCH"
+                log_audit "$ts" "$skill_name" "unknown" "NO_MATCH"
                 exit 3
             fi
             warn "skill '$skill_name' not in catalog. Falling back to Sonnet."
             run_sonnet "$skill_name" "$args"
-            log_audit "$ts" "$skill_name" "sonnet" "-" "0"
+            log_audit "$ts" "$skill_name" "sonnet" "OK"
+            emit_result "$skill_name" "sonnet" "OK" "$skill_name → sonnet (fallback)"
             return 0
         fi
         die "catalog lookup failed (exit=$lookup_exit)"
@@ -182,40 +238,48 @@ dispatch_skill() {
     local executor script_path=""
     executor=$(echo "$lookup_result" | grep "^executor=" | cut -d= -f2)
     script_path=$(echo "$lookup_result" | grep "^script_path=" | cut -d= -f2- || true)
+    routing_path="${routing_path}${executor}"
 
     case "$executor" in
         script)
-            run_script "$skill_name" "$script_path" "$args" "$allow_fallback"
+            run_script "$skill_name" "$script_path" "$args" "$allow_fallback" "$routing_path"
             ;;
         haiku)
             run_haiku "$skill_name" "$args"
-            log_audit "$ts" "$skill_name" "haiku" "-" "0"
+            log_audit "$ts" "$skill_name" "haiku" "OK"
+            emit_result "$skill_name" "haiku" "OK" "$routing_path"
             return 0
             ;;
         sonnet)
             run_sonnet "$skill_name" "$args"
-            log_audit "$ts" "$skill_name" "sonnet" "-" "0"
+            log_audit "$ts" "$skill_name" "sonnet" "OK"
+            emit_result "$skill_name" "sonnet" "OK" "$routing_path"
             return 0
             ;;
         opus)
             run_opus "$skill_name" "$args"
-            log_audit "$ts" "$skill_name" "opus" "-" "0"
+            log_audit "$ts" "$skill_name" "opus" "OK"
+            emit_result "$skill_name" "opus" "OK" "$routing_path"
             return 0
             ;;
         mcp-direct)
             run_mcp_direct "$skill_name" "$args"
-            log_audit "$ts" "$skill_name" "mcp-direct" "-" "0"
+            log_audit "$ts" "$skill_name" "mcp-direct" "OK"
+            emit_result "$skill_name" "mcp-direct" "OK" "$routing_path"
             return 0
             ;;
         *)
             if [[ "$allow_fallback" == "false" ]]; then
                 warn "unknown executor '$executor' for skill '$skill_name'."
-                log_audit "$ts" "$skill_name" "unknown" "-" "4"
+                emit_error "$skill_name" "EXEC_FAILED" "unknown executor: $executor"
+                emit_result "$skill_name" "unknown" "EXEC_FAILED" "$routing_path"
+                log_audit "$ts" "$skill_name" "unknown" "EXEC_FAILED"
                 exit 4
             fi
             warn "unknown executor '$executor' for skill '$skill_name'. Falling back to Sonnet."
             run_sonnet "$skill_name" "$args"
-            log_audit "$ts" "$skill_name" "sonnet" "-" "0"
+            log_audit "$ts" "$skill_name" "sonnet" "OK"
+            emit_result "$skill_name" "sonnet" "OK" "$skill_name → sonnet (fallback)"
             return 0
             ;;
     esac
@@ -298,6 +362,7 @@ main() {
             --args)     args="$2"; shift 2 ;;
             --list)     mode="list"; shift ;;
             --validate) mode="validate"; shift ;;
+            --json)     JSON_MODE="true"; shift ;;
             -h|--help)  mode="help"; shift ;;
             *)          die "unknown option: $1" ;;
         esac

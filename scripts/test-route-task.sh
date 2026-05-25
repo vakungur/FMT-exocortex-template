@@ -94,6 +94,12 @@ else
 fi
 echo ""
 
+# 11. JSON mode — NO_MATCH
+run_test "T11: --json --skill unknown (strict → NO_MATCH, exit 3)" 3 --json --skill unknown_skill
+
+# 12. JSON mode — OK fallback
+run_test "T12: --json --tag unknown (flex → OK, exit 0)" 0 --json --tag unknown_skill
+
 echo "========================"
 echo "PASS: $PASS  FAIL: $FAIL"
 exit $FAIL
