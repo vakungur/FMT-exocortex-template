@@ -1,3 +1,4 @@
+
 Выполни **полный** Day Open для роли Стратег (R1) **автономно**.
 
 ## Алгоритм (skill /day-open, шаги 0-7)
@@ -97,7 +98,7 @@ git push
 - ✅ Все решения принимай по skill /day-open (`${IWE_WORKSPACE:-{{WORKSPACE_DIR}}}/.claude/skills/day-open/SKILL.md`)
 - ✅ Финал: SUCCESS + git push (Telegram-уведомление отправляет strategist.sh автоматически после завершения)
 
-## Источники
+## Источники (на сервере tsekh-1)
 
 - HUB: `{{WORKSPACE_DIR}}/{{GOVERNANCE_REPO}}/current/`
 - SPOKES: `{{WORKSPACE_DIR}}/*/WORKPLAN.md`

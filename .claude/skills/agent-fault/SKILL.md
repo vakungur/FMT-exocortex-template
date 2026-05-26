@@ -1,11 +1,11 @@
 ---
 name: agent-fault
 description: Регистрация косяка агента в системе учёта WP-316 L1. Без LLM — детерминированный скрипт.
-argument-hint: "<severity> <description>"
+argument-hint: "record --severity {critical|major|minor} --fault '<description>'"
 routing:
   executor: script
   deterministic: true
-  script_path: DS-my-strategy/scripts/iwe_checklist_memory.py
+  script_path: DS-strategy/scripts/iwe_checklist_memory.py
 ---
 
 # Agent Fault Registrar
@@ -14,5 +14,5 @@ routing:
 
 Использование:
 ```bash
-bash "${IWE_SCRIPTS:-$HOME/IWE/scripts}/iwe_checklist_memory.py" record "major" "агент пропустил чеклист"
+python3 "${IWE_SCRIPTS:-$HOME/IWE/scripts}/iwe_checklist_memory.py" record --severity major --fault "агент пропустил чеклист"
 ```
