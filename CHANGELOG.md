@@ -5,6 +5,19 @@ All notable changes to FMT-exocortex-template will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: [Semantic Versioning](https://semver.org/).
 
+## [0.35.1] — 2026-06-01
+
+### Added
+
+- `AGENTS.md` (новый файл для Kimi-агента) — структурное место для правил, симметричное `CLAUDE.md` для Claude. Содержит: коммит-атрибуция Kimi, git staging без `-u/-A/-.`, координация через MCP Local Gateway (lock/peer-status), Drift Reporting, Working Directory, Language, Calendar Events, **Response Style — Pilot-Facing** (12 паттернов + 11 правил A1-A11 + детектор канала).
+- `memory/feedback_response_clarity_for_pilot.md` — общеплатформенное правило для всех агентов в одном файле: 12 паттернов клаттера + 11 правил A1-A11 (как писать пилоту: путь не подлежащее, англицизмы в скобках после русского описания, `exit 0`/`PASS`/`SHA` → русские слова, активный залог при ошибках) + детектор канала (стенограмма / синтез / чат / commit). Источник — peer-сессия `2026-06-01-27-agent-response-style`.
+- `CLAUDE.md §9 «Режим на пальцах (S-37)»` — расширен: добавлен детектор канала (technical mode vs «на пальцах» по словам в сообщении пилота); расширены правила (запрет пути как подлежащего, требование расшифровки имени сущности при первом упоминании, замена английских маркеров статуса, запрет пассивного залога при ошибках); ссылка на полный набор правил в `memory/feedback_response_clarity_for_pilot.md`.
+
+### Notes
+
+- `template-sync.sh` отрезает §9 при синхронизации, поэтому правки §9 в этом релизе сделаны прямой правкой `FMT/CLAUDE.md`, не через sync.
+- `update-manifest.json`: +2 пути (`AGENTS.md`, `memory/feedback_response_clarity_for_pilot.md`); версия `0.35.0 → 0.35.1`.
+
 
 
 

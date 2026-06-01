@@ -1,5 +1,5 @@
 {
-  "version": "0.35.0",
+  "version": "0.35.1",
   "description": "Манифест платформенных файлов FMT-exocortex-template. Используется update.sh для доставки обновлений.",
   "files": [
     {
@@ -102,10 +102,10 @@
       "path": ".claude/skills/_template/SKILL.md"
     },
     {
-      "path": ".claude/skills/apply-captures/SKILL.md"
+      "path": ".claude/skills/agent-fault/SKILL.md"
     },
     {
-      "path": ".claude/skills/agent-fault/SKILL.md"
+      "path": ".claude/skills/apply-captures/SKILL.md"
     },
     {
       "path": ".claude/skills/archgate/SKILL.md"
@@ -217,6 +217,9 @@
     },
     {
       "path": ".stignore"
+    },
+    {
+      "path": "AGENTS.md"
     },
     {
       "path": "CHANGELOG.md"
@@ -346,6 +349,9 @@
     },
     {
       "path": "memory/dry-run-contract.md"
+    },
+    {
+      "path": "memory/feedback_response_clarity_for_pilot.md"
     },
     {
       "path": "memory/fpf-reference.md"
@@ -645,6 +651,9 @@
       "path": "scripts/day-open-scaffold.sh"
     },
     {
+      "path": "scripts/fmt-critical-alert.sh"
+    },
+    {
       "path": "scripts/generate-executor-catalog.py"
     },
     {
@@ -661,9 +670,6 @@
     },
     {
       "path": "scripts/iwe-agent-dispatcher.py"
-    },
-    {
-      "path": "scripts/fmt-critical-alert.sh"
     },
     {
       "path": "scripts/iwe-audit.sh"
@@ -726,12 +732,6 @@
       "path": "scripts/script-promote.sh"
     },
     {
-      "path": "scripts/smoke-clean-env.sh"
-    },
-    {
-      "path": "scripts/test-route-task.sh"
-    },
-    {
       "path": "scripts/server-calendar.sh"
     },
     {
@@ -750,10 +750,16 @@
       "path": "scripts/skills-pull.sh"
     },
     {
+      "path": "scripts/smoke-clean-env.sh"
+    },
+    {
       "path": "scripts/sync_feedback_to_memory.py"
     },
     {
       "path": "scripts/template-sync.sh"
+    },
+    {
+      "path": "scripts/test-route-task.sh"
     },
     {
       "path": "scripts/validate-fmt-scripts.sh"
