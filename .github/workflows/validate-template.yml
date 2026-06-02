@@ -39,6 +39,8 @@ jobs:
             exit 1
           fi
           echo "PASS: CHANGELOG/manifest version sync ($CHANGELOG_VERSION)"
+      - name: Check README version badge sync
+        run: bash scripts/sync-version-badge.sh --check
 
   # Integration contract validator + fresh-install smoke-test.
   # Defense-in-depth для случая `git commit --no-verify` в pre-commit.
