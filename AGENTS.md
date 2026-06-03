@@ -266,3 +266,28 @@ The pilot reads agent responses as a human, not as a CI inspector. Twelve patter
 **Channel specifics (дополнительно):**
 - **Telegram bot:** commands in plain text (no `<code>`), no markdown headers (`#` → `*bold*`), no tables (→ lists with `*bold*` headers), paragraphs 2-3 sentences.
 - **Documents (posts, guides):** first paragraph = essence. Rest = details under spoilers. Examples and references at the end under «Примеры» spoiler.
+
+## Prompt Cache — PREFIX/BODY/TAIL (WP-375)
+
+Для headless-агентов (Kimi, cron-задачи) используй паттерн стабилизации кэша:
+- **PREFIX** — стабильная часть системного промпта (идентичность, правила, навыки)
+- **BODY** — контекст проекта (AGENTS.md, CLAUDE.md)
+- **TAIL** — волатильный контекст хода (память, профиль, timestamp)
+
+Антропик-кэш: TTL 5 мин, content-addressed. Реализация: DS-MCP/agent-runner.
+
+## Memory Lifecycle — HOT/WARM/COLD (WP-7 NR1.2)
+
+Память агента управляется по уровням «горячести»:
+- **HOT** — активная память сессии, в системном промпте
+- **WARM** — недавние уроки/замечания (<=14 дней), memory/feedback_*.md
+- **COLD** — архивное знание (>14 дней), memory-bleed.sh
+
+Детали: memory-lifecycle-spec.md.
+
+## Hermes Agent — координация (РП-392, РП-394)
+
+Если в экосистеме присутствует Hermes Agent (оркестратор с персистентной памятью):
+- Hermes НЕ заменяет Claude Code в кодинге
+- Hermes НЕ имеет MCP Gateway (acquire_file_lock / release_file_lock)
+- При правках файлов: git pull, проверить git status, править, git push
