@@ -504,23 +504,24 @@ else
         # MCP knowledge servers connect through Gateway (OAuth auto-flow)
         echo "  Знаниевые MCP-серверы подключаются через Gateway (автоматически):"
         echo ""
-        echo "  .mcp.json уже содержит iwe-knowledge → https://mcp.aisystant.com/mcp"
-        echo "  При первом запуске Claude Code откроется браузер для входа через Ory."
+        echo "  .mcp.json содержит iwe-knowledge → https://mcp.aisystant.com/mcp"
+        echo "  T1-T2: при первом запуске откроется браузер (OAuth через Ory)."
+        echo "  T3-T4: CLI-режим (IWE_TIER=T3 в env или tier: T3 в ~/.iwe/config.yaml)."
         echo "  Необходима подписка «Бесконечное развитие»."
-        echo ""
-        echo "  После входа проверьте командой /mcp в Claude Code."
+        echo "  После входа: /mcp в Claude Code."
     fi
 fi
 
-# === 4b. Propagate skills, hooks, rules, lib, config, detectors, scripts to workspace ===
-echo "[4b] Installing skills, hooks, rules, lib, config, detectors, scripts..."
+# === 4b. Propagate skills, hooks, rules, lib, config, detectors, scripts, styles to workspace ===
+echo "[4b] Installing skills, hooks, rules, lib, config, detectors, scripts, styles..."
 if $DRY_RUN; then
-    echo "  [DRY RUN] Would copy .claude/{skills,hooks,rules,lib,config,detectors,scripts,agents}/ → $WORKSPACE_DIR/.claude/"
+    echo "  [DRY RUN] Would copy .claude/{skills,hooks,rules,lib,config,detectors,scripts,agents,styles}/ → $WORKSPACE_DIR/.claude/"
 else
     mkdir -p "$WORKSPACE_DIR/.claude"
     # lib/config/detectors — runtime dependencies капчер-шины (capture-bus.sh) и детекторов
     # scripts — требуется скиллами (напр. load-extensions.sh)
-    for subdir in skills hooks rules lib config detectors scripts agents; do
+    # styles — дисциплина языковых стилей (WP-412)
+    for subdir in skills hooks rules lib config detectors scripts agents styles; do
         if [ -d "$TEMPLATE_DIR/.claude/$subdir" ]; then
             cp -r "$TEMPLATE_DIR/.claude/$subdir" "$WORKSPACE_DIR/.claude/"
             echo "  ✓ .claude/$subdir/ → $WORKSPACE_DIR/.claude/$subdir/"
@@ -533,6 +534,17 @@ else
     fi
 fi
 
+# Resolves IWE_TIER: env var → ~/.iwe/config.yaml → default T1
+check_user_tier() {
+    [ -n "${IWE_TIER:-}" ] && { echo "$IWE_TIER"; return; }
+    local cfg="${IWE_CONFIG:-$HOME/.iwe/config.yaml}"
+    if [ -f "$cfg" ]; then
+        local t; t=$(grep -E '^tier:' "$cfg" 2>/dev/null | head -1 | awk '{print $2}' | tr -d '"')
+        [ -n "$t" ] && { echo "$t"; return; }
+    fi
+    echo "T1"
+}
+
 # === 4c. Copy .mcp.json to workspace ===
 echo "[4c] Configuring .mcp.json..."
 
@@ -541,17 +553,45 @@ MCP_DEST="$WORKSPACE_DIR/.mcp.json"
 MCP_USER_EXT="$WORKSPACE_DIR/extensions/mcp-user.json"
 
 if $DRY_RUN; then
-    echo "  [DRY RUN] Would copy $MCP_TEMPLATE → $MCP_DEST"
-    echo "    iwe-knowledge → https://mcp.aisystant.com/mcp (OAuth)"
+    _IWE_TIER=$(check_user_tier)
+    echo "  [DRY RUN] Would generate $MCP_DEST (tier=$_IWE_TIER)"
+    case "$_IWE_TIER" in
+        T3|T4) echo "    iwe-knowledge → https://mcp.aisystant.com/mcp (CLI-режим)" ;;
+        *)     echo "    iwe-knowledge → https://mcp.aisystant.com/mcp (браузерный OAuth)" ;;
+    esac
     if [ -f "$MCP_USER_EXT" ] && command -v jq >/dev/null 2>&1; then
         echo "  [DRY RUN] Would merge extensions/mcp-user.json into .mcp.json"
     fi
 elif [ ! -f "$MCP_TEMPLATE" ]; then
     echo "  WARN: $MCP_TEMPLATE not found, skipping."
 else
-    # Copy template .mcp.json to workspace (no placeholders — Gateway URL is static)
-    cp "$MCP_TEMPLATE" "$MCP_DEST"
-    echo "  ✓ $MCP_DEST → iwe-knowledge (Gateway, OAuth)"
+    _IWE_TIER=$(check_user_tier)
+    _MCP_LOG="$WORKSPACE_DIR/logs/mcp-auth.log"
+    mkdir -p "$WORKSPACE_DIR/logs" && touch "$_MCP_LOG"
+
+    case "$_IWE_TIER" in
+        T3|T4)
+            # CLI-режим: заголовок сигнализирует gateway пропустить браузерный редирект
+            cat > "$MCP_DEST" <<'MCPEOF'
+{
+  "mcpServers": {
+    "iwe-knowledge": {
+      "type": "http",
+      "url": "https://mcp.aisystant.com/mcp",
+      "headers": { "x-iwe-auth-mode": "cli" }
+    }
+  }
+}
+MCPEOF
+            echo "  ✓ $MCP_DEST → iwe-knowledge (CLI-режим, tier=$_IWE_TIER)"
+            echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) setup tier=$_IWE_TIER mode=cli" >> "$_MCP_LOG"
+            ;;
+        *)
+            cp "$MCP_TEMPLATE" "$MCP_DEST"
+            echo "  ✓ $MCP_DEST → iwe-knowledge (браузерный OAuth, tier=$_IWE_TIER)"
+            echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) setup tier=$_IWE_TIER mode=browser" >> "$_MCP_LOG"
+            ;;
+    esac
 
     # Merge extensions/mcp-user.json if it exists and has content
     if [ -f "$MCP_USER_EXT" ]; then
@@ -600,10 +640,10 @@ elif ! command -v launchctl >/dev/null 2>&1; then
 else
     echo "[5/6] Installing roles..."
 
-    # Source ~/.iwe-paths — гарантирует IWE_RUNTIME / IWE_WORKSPACE / IWE_TEMPLATE
+    # Source $WORKSPACE_DIR/.iwe-paths — гарантирует IWE_RUNTIME / IWE_WORKSPACE / IWE_TEMPLATE
     # в env для role install.sh (тот же паттерн что в update.sh:836).
     # Без этого install.sh падает в legacy fallback и видит {{плейсхолдеры}}.
-    [ -f "$HOME/.iwe-paths" ] && . "$HOME/.iwe-paths"
+    [ -f "$WORKSPACE_DIR/.iwe-paths" ] && . "$WORKSPACE_DIR/.iwe-paths"
 
     MANUAL_ROLES=()
 
@@ -761,6 +801,9 @@ else
         echo "  - Morning ($TIMEZONE_DESC): strategy (Mon) / day-plan (Tue-Sun)"
         echo "  - Sunday night: week review"
     fi
+    echo ""
+    echo "Developer onboarding (T4+) — single entry point:"
+    echo "  cat docs/developer/README.md"
     echo ""
     echo "Update from upstream:"
     echo "  cd $TEMPLATE_DIR && bash update.sh"
