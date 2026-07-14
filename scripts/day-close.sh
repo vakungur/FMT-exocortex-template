@@ -18,13 +18,15 @@
 set -euo pipefail
 
 # === КОНФИГУРАЦИЯ (настроить при установке) ===
-WORKSPACE_DIR="${WORKSPACE_DIR:-$HOME/IWE}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/../.claude/lib/iwe-env-bootstrap.sh" || exit 1
 GOVERNANCE_REPO="${GOVERNANCE_REPO:-${IWE_GOVERNANCE_REPO:-DS-strategy}}"
 DS_STRATEGY="$WORKSPACE_DIR/$GOVERNANCE_REPO"
-# Slug = $HOME с '/' → '-' (macOS: /Users/x → -Users-x; Linux/WSL: /home/x → -home-x).
-# Переопределить можно через env IWE_MEMORY_SRC (например, для нестандартного $HOME).
-HOME_SLUG=$(echo "$HOME" | tr '/' '-')
-MEMORY_SRC="${IWE_MEMORY_SRC:-$HOME/.claude/projects/${HOME_SLUG}-IWE/memory}"
+# Slug derived from WORKSPACE_DIR (not $HOME) so it matches Claude's project key
+# regardless of workspace location. Override via IWE_MEMORY_SRC if needed.
+WORKSPACE_SLUG=$(echo "$WORKSPACE_DIR" | tr '/_ ' '-')
+MEMORY_SRC="${IWE_MEMORY_SRC:-$HOME/.claude/projects/${WORKSPACE_SLUG}/memory}"
 EXOCORTEX_DST="$DS_STRATEGY/exocortex"
 # MCP reindex — опциональный компонент (WP-187 iwe-knowledge Gateway заменяет локальный knowledge-mcp).
 # Переопределить путь можно через env IWE_SELECTIVE_REINDEX.
@@ -113,12 +115,14 @@ PYEOF
     fi
   fi
 
+  # issue #217: обратная подстановка $HOME -> {{HOME_DIR}} делает бэкап ОС-агностичным
+  # (симметрично прямой подстановке в setup.sh и restore-from-exocortex.sh).
   if [ -f "$WORKSPACE_DIR/CLAUDE.md" ]; then
-    cp "$WORKSPACE_DIR/CLAUDE.md" "$EXOCORTEX_DST/CLAUDE.md"
+    sed "s|$HOME|{{HOME_DIR}}|g" "$WORKSPACE_DIR/CLAUDE.md" > "$EXOCORTEX_DST/CLAUDE.md"
   fi
 
   if [ -f "$WORKSPACE_DIR/AGENTS.md" ]; then
-    cp "$WORKSPACE_DIR/AGENTS.md" "$EXOCORTEX_DST/AGENTS.md"
+    sed "s|$HOME|{{HOME_DIR}}|g" "$WORKSPACE_DIR/AGENTS.md" > "$EXOCORTEX_DST/AGENTS.md"
   fi
 
   local count

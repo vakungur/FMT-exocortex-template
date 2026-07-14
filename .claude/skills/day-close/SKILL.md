@@ -55,7 +55,7 @@ Grep MEMORY.md на паттерны «ждёт/блокер/blocked/остан�
 <!-- Детали: day-close-details.md § Шаг 4б -->
 
 ### 4в. Index Health Check
-`python3 {{HOME_DIR}}/IWE/${IWE_GOVERNANCE_REPO:-DS-strategy}/scripts/check-index-health.py` — для каждого FAIL/WARN: диагностика (дамп vs жанр) → перенести или пометить skip.
+`python3 ${IWE_TEMPLATE:-{{HOME_DIR}}/IWE/FMT-exocortex-template}/.claude/scripts/check-index-health.py` — для каждого FAIL/WARN: диагностика (дамп vs жанр) → перенести или пометить skip.
 <!-- Детали: day-close-details.md § Шаг 4в -->
 
 ### 4. Lesson Hygiene
@@ -83,10 +83,11 @@ WakaTime CLI (`~/.wakatime/wakatime-cli --today`) или Neon-fallback → Бю�
 `*a/*b FAIL` → НЕ помечать completed, вернуться к записи.
 <!-- Детали postconditions: day-close-details.md § Шаг 9 -->
 
-### 10. Закоммитить ${IWE_GOVERNANCE_REPO:-DS-strategy}
+### 10. Rule Classifier
+`python3 $HOME/IWE/.claude/scripts/rule-classifier.py` (идемпотентно, kill если >60 сек). **ДО коммита** — иначе его правки уходят в незакоммиченный хвост (issue #249).
 
-### 10b. Rule Classifier
-`python3 $HOME/IWE/.claude/scripts/rule-classifier.py` (после коммита, идемпотентно, kill если >60 сек).
+### 10b. Финальный коммит (все затронутые репозитории, не только governance)
+`git status --short` по КАЖДОМУ репо, который сессия трогала за день — как минимум workspace root (`{{HOME_DIR}}/IWE/`, там физически лежат `MEMORY.md` и `memory/*.md`, их правят шаги 4б/4) и `${IWE_GOVERNANCE_REPO:-DS-strategy}` (WeekPlan/DayPlan/WP-REGISTRY). Незафиксированное → `git add <specific paths>` → commit → push. Переходить к шагу 11 только когда `git status` чист во всех репо.
 
 ### 11. Верификация (Haiku R23)
 Sub-agent Haiku R23 (context isolation): передать чеклист + черновик итогов + список обновлённых файлов. По ❌ — исправить до показа пользователю.
