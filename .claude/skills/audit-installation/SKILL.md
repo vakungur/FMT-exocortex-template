@@ -1,6 +1,6 @@
 ---
 name: audit-installation
-description: Audit a user's IWE installation. Runs scripts/iwe-audit.sh + MCP healthcheck + ritual smoke-test via sentinel mechanism (dry-run-contract.md), passes report to a VR.R.002 Auditor subagent (context isolation) → verdict pass/warn/fail across 6 components (Inventory, L1 drift, DS-strategy, L3 customizations, MCP, ritual). Use after restore from backup, after update.sh, or for weekly verification.
+description: Аудит пользовательской инсталляции IWE. Запускает scripts/iwe-audit.sh + MCP healthcheck + smoke-test ритуала через sentinel-механику (контракт dry-run-contract.md), передаёт отчёт subagent'у в роли VR.R.002 Аудитор (context isolation) → verdict ✅/⚠️/❌ по 6 компонентам (Inventory, L1 drift, DS-strategy, L3 customizations, MCP, ритуал). Используй после restore из бэкапа, после update.sh, или при еженедельной сверке.
 argument-hint: "[--skip-mcp] [--critical]"
 version: 1.0.0
 layer: L1
@@ -11,6 +11,11 @@ triggers:
 routing:
   executor: haiku
   deterministic: false
+agents: single
+interaction: multi-step
+gates_required: []
+gates_enforced: []
+gates_rationale: "операционный скилл; WP Gate применим только при создании нового РП, не для операционных вызовов"
 ---
 
 # Аудит инсталляции IWE
@@ -20,6 +25,10 @@ routing:
 > **Принцип:** детектор отчитывается, оператор делает (см. `scripts/iwe-drift.sh:7-11`). Auto-fix не входит в обещание.
 
 Аргументы: $ARGUMENTS
+
+## When to use
+
+Аудит пользовательской инсталляции IWE. Запускает scripts/iwe-audit.sh + MCP healthcheck + smoke-test ритуала через sentinel-механику (контракт dry-run-contract.md), передаёт отчёт subagent'у в роли VR.R.002 Аудитор (context isolation) → verdict ✅/⚠️/❌ по 6 компонентам (Inventory, L1 drift, DS-strategy, L3 customizations, MCP, ритуал). Используй после restore из бэкапа, после update.sh, или при еженедельной сверке.
 
 ## Обещание
 
@@ -63,15 +72,17 @@ bash "$AUDIT_SCRIPT" $([ "${ARGUMENTS:-}" = "--critical" ] && echo "--critical")
 | Tool | Параметры | Уровень | Что считаем |
 |------|-----------|---------|-------------|
 | `mcp__claude_ai_IWE__knowledge_search` | `query: "test"`, `limit: 1` | бесплатный | ✅ если ответ <15s |
-| `mcp__claude_ai_IWE__github_status` | (без параметров) | **подписочный** | ✅ если ответ; **403/subscription_required → ⏸️** (не считать failure) |
+| `mcp__claude_ai_IWE__github_status` | (без параметров) | бесплатный | ✅ если ответ |
 | `mcp__claude_ai_IWE__personal_search` | `query: "ping"`, `limit: 1` | **подписочный** | ✅ если ответ; **403/subscription_required → ⏸️** (не считать failure) |
 | `mcp__claude_ai_IWE__dt_read_digital_twin` | `path: "1_declarative"` | **подписочный** | ✅ если ответ; **403/subscription_required → ⏸️** (не считать failure) |
 
-**Подписочное гейтование (DP.SC.112).** `personal_*`, `dt_*` и `github_status` требуют активной БР в `subscription_grants`. Без подписки — это **не сбой инсталляции**, а ожидаемый отказ. Помечать как ⏸️ subscription_required, не ❌. Coverage считать только по доступным для пользователя tool'ам.
+**Подписочное гейтование (DP.SC.112).** `personal_*` и `dt_*` требуют активной БР в `subscription_grants`. Без подписки — это **не сбой инсталляции**, а ожидаемый отказ. Помечать как ⏸️ subscription_required, не ❌. Coverage считать только по доступным для пользователя tool'ам.
 
 Сформировать markdown-секцию `## 4. MCP healthcheck`:
 
 ```markdown
+## Algorithm
+
 ## 4. MCP healthcheck
 
 | Tool | Статус | Латентность | Примечание |
@@ -92,9 +103,9 @@ Coverage: N/4
 
 ### Алгоритм
 
-1. **Создать sentinel** (единый файл, не session-bound — см. dry-run-gate.sh; issue #237 п.2 закрыл рассинхрон создания/очистки по CLAUDE_SESSION_ID, который у субагентов пуст/иной):
+1. **Создать sentinel** (единое имя, не session-bound — v2, WP-7/BUGTRIAGE2, issue #237):
    ```bash
-   echo "{\"created_at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"session_id\":\"${CLAUDE_SESSION_ID:-unknown}\",\"initiator\":\"audit-installation\"}" > /tmp/iwe-dry-run.flag
+   echo "{\"created_at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"session_id\":\"${CLAUDE_SESSION_ID:-noid}\",\"initiator\":\"audit-installation\"}" > /tmp/iwe-dry-run.flag
    ```
 2. **Запустить subagent** через Agent tool (subagent_type=general-purpose, модель Sonnet) с промптом:
 

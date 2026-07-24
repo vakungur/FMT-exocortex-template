@@ -378,16 +378,19 @@ else
 # Do not add shell commands — only KEY=VALUE lines are allowed.
 
 # === Core (substituted into runtime files via build-runtime.sh) ===
-GITHUB_USER=$GITHUB_USER
-WORKSPACE_DIR=$WORKSPACE_DIR
-CLAUDE_PATH=$CLAUDE_PATH
-CLAUDE_PROJECT_SLUG=$CLAUDE_PROJECT_SLUG
-TIMEZONE_HOUR=$TIMEZONE_HOUR
-TIMEZONE_DESC=$TIMEZONE_DESC
-HOME_DIR=$HOME_DIR
-GOVERNANCE_REPO=$GOVERNANCE_REPO
-IWE_TEMPLATE=$IWE_TEMPLATE_PATH
-IWE_RUNTIME=$IWE_RUNTIME_PATH
+# issue #223: значения ВСЕГДА в кавычках — файл читается через `source`,
+# непроцитированное значение с пробелом (напр. TIMEZONE_DESC=4:00 UTC)
+# ломает sourcing: bash трактует хвост как команду ("UTC: command not found").
+GITHUB_USER="$GITHUB_USER"
+WORKSPACE_DIR="$WORKSPACE_DIR"
+CLAUDE_PATH="$CLAUDE_PATH"
+CLAUDE_PROJECT_SLUG="$CLAUDE_PROJECT_SLUG"
+TIMEZONE_HOUR="$TIMEZONE_HOUR"
+TIMEZONE_DESC="$TIMEZONE_DESC"
+HOME_DIR="$HOME_DIR"
+GOVERNANCE_REPO="$GOVERNANCE_REPO"
+IWE_TEMPLATE="$IWE_TEMPLATE_PATH"
+IWE_RUNTIME="$IWE_RUNTIME_PATH"
 
 # === Platform LLM Proxy (optional own API key for unlimited usage) ===
 PLATFORM_LLM_PROXY_URL=https://llm.aisystant.com/v1
@@ -680,6 +683,23 @@ else
     fi
 fi
 
+# === 4f. Regenerate hot-files.list for the actual governance repo (issue #294/#291) ===
+# The repo ships hot-files.list pre-baked with the author's GOVERNANCE_REPO name —
+# without regenerating here, verify-context-budget.sh reports MISSING on any install
+# where GOVERNANCE_REPO differs from the author's.
+if $DRY_RUN; then
+    echo "[DRY RUN] Would regenerate hot-files.list (IWE_GOVERNANCE_REPO=$GOVERNANCE_REPO)"
+else
+    echo "[4f] Regenerating hot-files.list..."
+    if HOTFILES_OUTPUT=$(IWE_ROOT="$WORKSPACE_DIR" IWE_GOVERNANCE_REPO="$GOVERNANCE_REPO" bash "$TEMPLATE_DIR/scripts/generate-hot-files-list.sh" 2>&1); then
+        echo "$HOTFILES_OUTPUT" | sed 's/^/  /'
+    else
+        echo "$HOTFILES_OUTPUT" | sed 's/^/  /'
+        echo "  ⚠ hot-files.list не пересобран — запусти вручную:"
+        echo "    IWE_GOVERNANCE_REPO=$GOVERNANCE_REPO bash $TEMPLATE_DIR/scripts/generate-hot-files-list.sh"
+    fi
+fi
+
 # === 5. Install roles (autodiscovery via role.yaml) ===
 if $CORE_ONLY; then
     echo "[5/6] Автоматизация... пропущена (core mode)"
@@ -784,8 +804,8 @@ else
     fi
 fi
 
-# === 7. Clone Base repos (FPF + SPF) ===
-echo "[7/7] Installing Base repos (FPF, SPF)..."
+# === 7. Clone Base repos (ZP + FPF + SPF) ===
+echo "[7/7] Installing Base repos (ZP, FPF, SPF)..."
 if $CORE_ONLY; then
     echo "  пропущено (core mode)"
 elif ! command -v gh >/dev/null 2>&1; then
@@ -809,6 +829,7 @@ else
         fi
     }
 
+    clone_base_repo "ZP" "TserenTserenov/ZP"
     clone_base_repo "FPF" "ailev/FPF"
     clone_base_repo "SPF" "TserenTserenov/SPF"
 fi

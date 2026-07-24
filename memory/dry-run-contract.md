@@ -47,7 +47,7 @@ description: "Операционный файл памяти IWE"
 
 ### Контракт
 
-При наличии валидного sentinel-файла (для текущего `SESSION_ID`, mtime ≤ 10 мин) хук блокирует **любой tool-call с побочными эффектами** и возвращает exit 2 с диагностикой:
+При наличии валидного sentinel-файла (единое имя, mtime ≤ 10 мин) хук блокирует **любой tool-call с побочными эффектами** и возвращает exit 2 с диагностикой:
 
 ```
 [dry-run-gate] BLOCKED: <tool> on <path/cmd>
@@ -85,7 +85,26 @@ tee (не /dev/null)
 sed -i*
 curl -X (POST|PUT|DELETE|PATCH) | curl --data | curl -d
 psql ... (INSERT|UPDATE|DELETE|TRUNCATE|DROP|ALTER)   # матчится по оригиналу (SQL в кавычках)
-bash|sh|zsh|eval|source|.|xargs   # indirect execution — payload неинспектируем после quote-strip
+bash|sh|zsh <script>              # indirect execution — block, КРОМЕ whitelist ниже (issue #264)
+eval|source|.|xargs               # indirect execution — payload неинспектируем после quote-strip
+
+Whitelist read-only helpers (issue #264) — разрешены под dry-run, т.к. write-путей
+в коде скрипта нет (проверяется при добавлении, см. правило ниже):
+
+```
+.claude/scripts/load-extensions.sh                    # относительный, от workspace-root
+$HOME/IWE/.claude/scripts/load-extensions.sh          # абсолютный, захардкожен
+```
+
+Абсолютный паттерн захардкожен в `$HOME/IWE`, не glob `*/.claude/...` и не
+`$IWE_ROOT` — иначе подложный `/tmp/.claude/scripts/load-extensions.sh` или
+env-инъекция `IWE_ROOT=/tmp/evil` прошли бы gate (review-01 High, review-02 H1).
+Пользователи с нестандартным расположением workspace вызывают helper
+относительным путём из корня workspace.
+
+Правило whitelist: добавление только через (1) строку здесь + (2) ветку в case
+`bash|sh|zsh` в dry-run-gate.sh + (3) code review на отсутствие write-путей
+(redirect/tee/sed -i/mv/rm в коде скрипта).
 > файл / >> файл             # редирект в реальный файл (не /dev/null)
 ```
 
@@ -159,7 +178,7 @@ fi
 
 ```bash
 # В начале extension-скрипта, ДО любого write-действия:
-if [ -f "/tmp/iwe-dry-run-${CLAUDE_SESSION_ID:-noid}.flag" ]; then
+if [ -f "/tmp/iwe-dry-run.flag" ]; then
     echo "[extension] dry-run active, skipping write steps"
     exit 0
 fi

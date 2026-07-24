@@ -117,7 +117,7 @@ print(result)
 fi
 
 # Inbox convention (WP-434): every WP is a folder inbox/WP-N/ with main file WP-N.md.
-# Slug is dropped from the filename (lives in title: frontmatter); archive stub keeps it.
+# Slug is dropped from the filename (lives in title: frontmatter).
 WP_DIR="$INBOX/WP-${WP_NUM}"
 WP_FILE="$WP_DIR/WP-${WP_NUM}.md"
 mkdir -p "$WP_DIR"
@@ -143,7 +143,7 @@ fi
 
 # --- Шаг 1: context file ---
 echo ""
-echo "1/6 context file..."
+echo "1/5 context file..."
 
 cat > "$WP_FILE" <<WPEOF
 ---
@@ -155,6 +155,7 @@ budget: ${BUDGET}
 created: ${TODAY}
 last_session: ${TODAY}
 related: []
+activation: on-demand
 ---
 
 # WP-${WP_NUM}: ${TITLE}
@@ -196,29 +197,10 @@ WPEOF
 
 echo "   ✅ $WP_FILE"
 
-# --- Шаг 2: archive stub ---
-echo "2/6 archive stub..."
+# --- Шаг 2: WP-REGISTRY.md ---
+echo "2/5 WP-REGISTRY.md..."
 
-ARCHIVE_DIR="$STRATEGY/archive/wp-contexts"
-ARCHIVE_STUB="$ARCHIVE_DIR/WP-${WP_NUM}-${SLUG}.md"
-cat > "$ARCHIVE_STUB" <<ARCHEOF
----
-wp: ${WP_NUM}
-title: "${TITLE}"
-created: ${TODAY}
-status: pending
----
-
-# WP-${WP_NUM}: ${TITLE} — §Закрытие
-
-*(заполняется при закрытии РП)*
-ARCHEOF
-echo "   ✅ $ARCHIVE_STUB"
-
-# --- Шаг 3: WP-REGISTRY.md ---
-echo "3/6 WP-REGISTRY.md..."
-
-python3 - "$REGISTRY" "$WP_NUM" "$PRIORITY" "$TITLE" "$REPO" "$BUDGET" "$GOV_REPO" <<'PYEOF'
+if ! python3 - "$REGISTRY" "$WP_NUM" "$PRIORITY" "$TITLE" "$REPO" "$BUDGET" "$GOV_REPO" <<'PYEOF'
 import sys
 registry_path, wp_num, priority, title, repo, budget, gov_repo = sys.argv[1:8]
 
@@ -227,19 +209,80 @@ with open(registry_path, "r", encoding="utf-8") as f:
 
 # Найти строку-разделитель после заголовка таблицы (|---|---|...)
 insert_at = None
+header_line = None
 for i, line in enumerate(lines):
     if line.strip().startswith("|---") and i > 0 and lines[i-1].strip().startswith("| #"):
         insert_at = i + 1
+        header_line = lines[i-1]
         break
 
 if insert_at is None:
     print("❌ Не найден заголовок таблицы REGISTRY", file=sys.stderr)
     sys.exit(1)
 
+# Схема-гард (issue #263, расширено issue #276): раньше писатель требовал ровно
+# 6 колонок в заголовке — REGISTRY с легитимно другим числом/порядком колонок
+# (та же семантика, доп. колонка сверху) блокировался целиком, хотя читатель
+# (check-wp-format.py::find_column_indices) уже толерантен к такой вариации.
+# Вместо счёта колонок — строим {имя: индекс} по фактическому заголовку и
+# проверяем наличие 6 канонических имён, не их порядок/количество.
+header_cols = [c.strip() for c in header_line.strip().strip("|").split("|")]
+CANONICAL_NAMES = ["#", "P", "Название", "Ст", "Репо", "Бюджет"]
+# issue #297: вендорский skeleton (templates/strategy-skeleton/docs/WP-REGISTRY.md)
+# пишет полные русские имена («Приоритет», «Статус», «Репозитории»), а не короткие
+# канонические («P», «Ст», «Репо») — та же семантика, другое написание. Раньше
+# сверка требовала буквального совпадения и падала даже на только что созданном
+# из вендорского skeleton реестре. Синонимы резолвятся к канонической колонке до
+# проверки — те же строки find_column_indices() в check-wp-format.py уже читают
+# оба варианта позиционным fallback'ом, здесь та же терпимость явным списком.
+COLUMN_SYNONYMS = {
+    "Приоритет": "P",
+    "Статус": "Ст",
+    "Репозитории": "Репо",
+    "Репозиторий": "Репо",
+}
+col_index = {}
+for i, name in enumerate(header_cols):
+    canonical = COLUMN_SYNONYMS.get(name, name)
+    col_index.setdefault(canonical, i)
+missing_names = [name for name in CANONICAL_NAMES if name not in col_index]
+if missing_names:
+    print(
+        "❌ WP-REGISTRY.md: заголовок таблицы не содержит обязательных колонок {}.".format(
+            missing_names
+        ),
+        file=sys.stderr,
+    )
+    print("   Заголовок: {}".format(header_line.strip()), file=sys.stderr)
+    print(
+        "   create-wp.sh требует колонки # | P | Название | Ст | Репо | Бюджет —",
+        file=sys.stderr,
+    )
+    print(
+        "   без них не знает, куда писать новую строку.",
+        file=sys.stderr,
+    )
+    print(
+        "   Приведите заголовок REGISTRY к схеме с этими 6 колонками (порядок и",
+        file=sys.stderr,
+    )
+    print("   доп. колонки — свободные), затем повторите создание РП.", file=sys.stderr)
+    sys.exit(1)
+
 repo_cell = repo if repo else "{}/inbox/WP-{}/".format(gov_repo, wp_num)
-new_row = "| {} | {} | **{}** | ⏳ | {} | {} |\n".format(
-    wp_num, priority, title, repo_cell, budget
-)
+values_by_name = {
+    "#": wp_num,
+    "P": priority,
+    "Название": "**{}**".format(title),
+    "Ст": "⏳",
+    "Репо": repo_cell,
+    "Бюджет": budget,
+}
+row_cells = ["—"] * len(header_cols)
+for name, idx in col_index.items():
+    if name in values_by_name:
+        row_cells[idx] = values_by_name[name]
+new_row = "| " + " | ".join(row_cells) + " |\n"
 lines.insert(insert_at, new_row)
 
 with open(registry_path, "w", encoding="utf-8") as f:
@@ -247,17 +290,22 @@ with open(registry_path, "w", encoding="utf-8") as f:
 
 print("   ✅ REGISTRY: строка {} добавлена".format(wp_num))
 PYEOF
+then
+  exit 1
+fi
 
 # Post-write verification (issue #256): create-wp.sh once reported success here
 # without the row actually landing in REGISTRY — the writer above has no retry/lock,
 # so confirm the row is really there before moving on.
-if ! grep -qF "| ${WP_NUM} |" "$REGISTRY"; then
+# issue #263: некоторые репо исторически пишут номер РП с префиксом (| WP-N |),
+# не голым числом (| N |) — grep должен принимать оба формата.
+if ! grep -qE "\| \*?\*?(WP-)?${WP_NUM}\*?\*? \|" "$REGISTRY"; then
   echo "❌ REGISTRY write verification FAILED: строка WP-${WP_NUM} не найдена после записи" >&2
   exit 1
 fi
 
 # --- Шаг 3: WeekPlan ---
-echo "4/6 WeekPlan..."
+echo "3/5 WeekPlan..."
 
 WEEKPLAN=$(find "$STRATEGY/current" -maxdepth 1 -name "WeekPlan W*.md" 2>/dev/null | sort -r | head -1)
 
@@ -295,8 +343,8 @@ else
   echo "   ⚠️  WeekPlan не найден в current/ — добавить вручную" >&2
 fi
 
-# --- Шаг 5: Strategy.md (только если --result задан и бюджет ≥3h) ---
-echo "5/6 Strategy.md..."
+# --- Шаг 4: Strategy.md (только если --result задан и бюджет ≥3h) ---
+echo "4/5 Strategy.md..."
 
 BUDGET_H=$(echo "$BUDGET" | sed 's/[^0-9]//g')
 if [[ -n "$RESULT" && "${BUDGET_H:-0}" -ge 3 ]]; then
@@ -342,8 +390,8 @@ else
   echo "   ℹ️  РП <3h — маппинг в Strategy.md не требуется"
 fi
 
-# --- Шаг 6: active-wp.md ---
-echo "6/6 active-wp.md..."
+# --- Шаг 5: active-wp.md ---
+echo "5/5 active-wp.md..."
 
 if [[ -f "$STRATEGY/scripts/build-active-wp.py" ]]; then
   python3 "$STRATEGY/scripts/build-active-wp.py" \
@@ -369,6 +417,5 @@ fi
 echo ""
 echo "✅ WP-${WP_NUM} создан: $TITLE"
 echo "   context: inbox/WP-${WP_NUM}/WP-${WP_NUM}.md"
-echo "   archive: archive/wp-contexts/WP-${WP_NUM}-${SLUG}.md"
 echo "   Следующий шаг: заполнить «Проблема», «Артефакт», «Фазы» в context file"
 echo "   Не забыть: Linear issue"
