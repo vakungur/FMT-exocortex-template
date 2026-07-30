@@ -444,6 +444,9 @@
       "path": "AGENTS.md"
     },
     {
+      "path": "AGENTS.override.md"
+    },
+    {
       "path": "CLAUDE.md"
     },
     {
@@ -1429,6 +1432,9 @@
     },
     {
       "path": "scripts/sync_feedback_to_memory.py"
+    },
+    {
+      "path": "scripts/template-sync.sh"
     },
     {
       "path": "scripts/test-route-task.sh"

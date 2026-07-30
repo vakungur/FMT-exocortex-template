@@ -43,19 +43,34 @@ else
 fi
 
 LOG_DIR="$HOME/logs/extractor"
-if [ -n "${CLAUDE_CLI_PATH:-}" ]; then
-    CLAUDE_PATH="$CLAUDE_CLI_PATH"
-elif command -v claude &>/dev/null; then
-    CLAUDE_PATH="$(command -v claude)"
-elif [ -x "$HOME/.npm-global/bin/claude" ]; then
-    CLAUDE_PATH="$HOME/.npm-global/bin/claude"
-else
-    CLAUDE_PATH="{{CLAUDE_PATH}}"  # fallback: build-runtime должен был подставить
-fi
 ENV_FILE="$HOME/.config/aist/env"
 
-# AI CLI: переопределение через переменные окружения (см. strategist.sh)
-AI_CLI="${AI_CLI:-$CLAUDE_PATH}"
+# AI CLI: explicit override → build-runtime setting → legacy Claude fallback.
+# command -v accepts both an absolute path and a command name from PATH.
+resolve_ai_cli() {
+    local candidate
+    for candidate in "${AI_CLI:-}" "${CLAUDE_CLI_PATH:-}" "{{CLAUDE_PATH}}"; do
+        [ -n "$candidate" ] || continue
+        if command -v "$candidate" >/dev/null 2>&1; then
+            command -v "$candidate"
+            return 0
+        fi
+    done
+    if command -v claude >/dev/null 2>&1; then
+        command -v claude
+        return 0
+    fi
+    if [ -x "$HOME/.npm-global/bin/claude" ]; then
+        printf '%s\n' "$HOME/.npm-global/bin/claude"
+        return 0
+    fi
+    return 1
+}
+
+AI_CLI="$(resolve_ai_cli)" || {
+    echo "Не найден исполняемый AI CLI. Настрой AI_CLI, CLAUDE_CLI_PATH или CLAUDE_PATH." >&2
+    exit 1
+}
 AI_CLI_PROMPT_FLAG="${AI_CLI_PROMPT_FLAG:--p}"
 AI_CLI_EXTRA_FLAGS="${AI_CLI_EXTRA_FLAGS:---dangerously-skip-permissions --allowedTools Read,Write,Edit,Glob,Grep,Bash}"
 

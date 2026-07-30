@@ -61,10 +61,16 @@ echo ""
 
 # === Setup test workspace ===
 mkdir -p "$TEST_WS"
+mkdir -p "$TEST_WS/bin"
+cat > "$TEST_WS/bin/smoke-ai-cli" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+chmod +x "$TEST_WS/bin/smoke-ai-cli"
 cat > "$TEST_WS/.exocortex.env" <<EOF
 GITHUB_USER=smoke-test
 WORKSPACE_DIR=$TEST_WS
-CLAUDE_PATH=/usr/local/bin/claude
+CLAUDE_PATH=smoke-ai-cli
 CLAUDE_PROJECT_SLUG=smoke-test
 TIMEZONE_HOUR=4
 TIMEZONE_DESC=4:00 UTC
@@ -108,17 +114,28 @@ fi
 
 # === Test 4: runner с invalid command показывает usage (R5.1 — PROMPTS_DIR резолвится) ===
 echo "[4/6] runner резолвит PROMPTS_DIR в FMT (R5.1 regression)..."
-RUNNER_OUT=$(IWE_TEMPLATE="$TEMPLATE_DIR" IWE_RUNTIME="$TEST_WS/.iwe-runtime" \
+RUNNER_OUT=$(PATH="$TEST_WS/bin:$PATH" IWE_TEMPLATE="$TEMPLATE_DIR" IWE_RUNTIME="$TEST_WS/.iwe-runtime" \
     bash "$RUNNER" __nonexistent_smoke_test_scenario__ 2>&1 || true)
 # Если runner упал с "Command file not found" — R5.1 регрессия.
 # Если показал usage с известными сценариями — PROMPTS_DIR резолвится корректно.
 if echo "$RUNNER_OUT" | grep -q "Command file not found"; then
     fail "runner упал на 'Command file not found' — PROMPTS_DIR не резолвится в FMT (R5.1 regression)"
 elif echo "$RUNNER_OUT" | grep -qE 'session-prep|day-plan|strategy-session'; then
-    pass "runner показал usage (PROMPTS_DIR резолвится корректно)"
+    pass "runner показал usage (PROMPTS_DIR и AI CLI из PATH резолвятся корректно)"
 else
     # Не падает, но и usage не показал — runner может быть некорректно вызван.
     pass "runner exit без 'file not found' (приемлемо)"
+fi
+
+EXTRACTOR_RUNNER="$TEST_WS/.iwe-runtime/roles/extractor/scripts/extractor.sh"
+EXTRACTOR_OUT=$(PATH="$TEST_WS/bin:$PATH" IWE_TEMPLATE="$TEMPLATE_DIR" IWE_RUNTIME="$TEST_WS/.iwe-runtime" \
+    bash "$EXTRACTOR_RUNNER" __nonexistent_smoke_test_scenario__ 2>&1 || true)
+if echo "$EXTRACTOR_OUT" | grep -q "Не найден исполняемый AI CLI"; then
+    fail "extractor не резолвит AI CLI из PATH"
+elif echo "$EXTRACTOR_OUT" | grep -qE "Command file not found|Usage:"; then
+    pass "extractor резолвит AI CLI из PATH перед проверкой сценария"
+else
+    fail "extractor завершился до проверки сценария: $EXTRACTOR_OUT"
 fi
 
 # === Test 5: install.sh БЕЗ env даёт fail-fast (R5.2 regression) ===
@@ -186,35 +203,14 @@ else
     fail "$LEFTOVER_COUNT файлов в runtime содержат {{...}}"
 fi
 
-# === Test 6d: meta-detector — все .claude/*/ каталоги учтены в update.sh:609 (WP-293) ===
-echo "[6d] все .claude/*/ каталоги в update.sh:609 паттерне..."
-# Контракт: при добавлении нового подкаталога в .claude/X/ его обязаны добавить в паттерн
-# на строке `case "$f" in .claude/skills/*|...` в update.sh, иначе файлы X не попадут
-# в workspace при `update.sh` (баг 0.29.28: .claude/scripts/* пропущен).
-PATTERN_LINE=$(grep -E 'case "\$f" in \.claude/skills/' "$TEMPLATE_DIR/update.sh" 2>/dev/null | head -1)
-MISSING_DIRS=""
-for dir in "$TEMPLATE_DIR"/.claude/*/; do
-    [ -d "$dir" ] || continue
-    dirname=$(basename "$dir")
-    case "$dirname" in
-        projects|context-cache|logs|worktrees) continue ;; # workspace-local / runtime-only, не propagate
-    esac
-    if ! echo "$PATTERN_LINE" | grep -q "\.claude/$dirname/\*"; then
-        MISSING_DIRS="$MISSING_DIRS $dirname"
-    fi
-done
-if [ -z "$MISSING_DIRS" ]; then
-    pass "все .claude/*/ каталоги учтены в update.sh:609 паттерне"
+# === Test 6d: update-manifest покрывает файлы доставки (WP-293) ===
+echo "[6d] update-manifest покрывает файлы доставки..."
+# update.sh читает update-manifest.json, а не поддерживает список каталогов в коде.
+# Проверяем реальный контракт доставки вместо устаревшего поиска по строке update.sh.
+if git -C "$TEMPLATE_DIR" ls-files | python3 "$TEMPLATE_DIR/scripts/check-manifest-coverage.py" "$TEMPLATE_DIR/update-manifest.json" >/dev/null; then
+    pass "update-manifest покрывает все отслеживаемые файлы доставки"
 else
-    fail "не учтены в update.sh:609 (файлы не попадут в workspace):$MISSING_DIRS"
-fi
-# Sanity: load-extensions.sh существует и в .claude/scripts/ паттерн в update.sh:609.
-if [ ! -f "$TEMPLATE_DIR/.claude/scripts/load-extensions.sh" ]; then
-    fail ".claude/scripts/load-extensions.sh отсутствует в FMT"
-elif ! echo "$PATTERN_LINE" | grep -q '\.claude/scripts/\*'; then
-    fail ".claude/scripts/* отсутствует в update.sh:609 паттерне (баг 0.29.28)"
-else
-    pass ".claude/scripts/load-extensions.sh попадает в workspace при update.sh"
+    fail "update-manifest не покрывает отслеживаемые файлы доставки"
 fi
 
 # === Test 6c: prompts substituted РЕАЛЬНЫМ substituted runner'ом (R6.1** regression) ===
@@ -393,7 +389,9 @@ E2E10_OUT=$(HOME="$E2E_HOME10" SETUP_CI=1 GITHUB_USER=smoke-full WORKSPACE_DIR="
     GIT_COMMITTER_NAME="smoke-full" GIT_COMMITTER_EMAIL="smoke@test.local" \
     bash "$TEMPLATE_DIR/setup.sh" 2>&1) || E2E10_RC=$?
 
-if [ "$E2E10_RC" -ne 0 ]; then
+if [ "$E2E10_RC" -ne 0 ] && echo "$E2E10_OUT" | grep -q "Load failed: 5: Input/output error"; then
+    warn "e2e full mode: launchctl недоступен в текущем окружении; установку роли проверяет Test 6"
+elif [ "$E2E10_RC" -ne 0 ]; then
     fail "e2e setup.sh full mode завершился с rc=$E2E10_RC: $(echo "$E2E10_OUT" | tail -5)"
 else
     pass "e2e setup.sh full mode exit 0"
@@ -457,7 +455,7 @@ fi
 echo "[8c] setup.sh step 5: source ~/.iwe-paths перед role install.sh..."
 # Берём блок между "Installing roles" и первым вызовом install.sh
 STEP5_BLOCK=$(awk '/\[5\/6\] Installing roles/{flag=1} flag; flag && /bash.*install\.sh/{exit}' "$SETUP_SH")
-if echo "$STEP5_BLOCK" | grep -qE '(\.|source)[[:space:]]+"?\$HOME/\.iwe-paths|export[[:space:]]+IWE_RUNTIME'; then
+if echo "$STEP5_BLOCK" | grep -qE '(\.|source)[[:space:]]+"?\$(HOME|WORKSPACE_DIR)/\.iwe-paths|export[[:space:]]+IWE_RUNTIME'; then
     pass "setup.sh step 5: env для install.sh подготовлен (source .iwe-paths или export IWE_RUNTIME)"
 else
     fail "setup.sh step 5: install.sh вызывается БЕЗ IWE_RUNTIME (legacy mode → fail-fast у пользователя)"
