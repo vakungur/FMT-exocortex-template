@@ -87,6 +87,7 @@ do_backup() {
     "$MEMORY_SRC/" "$EXOCORTEX_DST/"
 
   # Merge day-rhythm-config.yaml: use auto-memory as base, preserve non-empty user values in dst.
+  # This intentionally avoids PyYAML: day-close must work on a default macOS Python.
   # User-configurable keys protected: day_open.calendar_ids
   local rhythm_src="$MEMORY_SRC/day-rhythm-config.yaml"
   local rhythm_dst="$EXOCORTEX_DST/day-rhythm-config.yaml"
@@ -94,27 +95,54 @@ do_backup() {
     if [ ! -f "$rhythm_dst" ]; then
       cp "$rhythm_src" "$rhythm_dst"
     else
-      python3 - "$rhythm_src" "$rhythm_dst" << 'PYEOF'
-import sys, yaml
+      if ! python3 - "$rhythm_src" "$rhythm_dst" << 'PYEOF'
+import re
+import sys
+from pathlib import Path
 
-src_path, dst_path = sys.argv[1], sys.argv[2]
-with open(src_path) as f:
-    src_data = yaml.safe_load(f) or {}
-with open(dst_path) as f:
-    dst_data = yaml.safe_load(f) or {}
+src_path, dst_path = map(Path, sys.argv[1:])
+src = src_path.read_text(encoding="utf-8")
+dst = dst_path.read_text(encoding="utf-8")
 
-merged = dict(src_data)
 
-# Preserve non-empty user values from dst (L4 config, user-editable keys)
-USER_KEYS = [("day_open", "calendar_ids")]
-for section, key in USER_KEYS:
-    dst_val = dst_data.get(section, {}).get(key)
-    if dst_val:  # preserve non-empty dst value over template default
-        merged.setdefault(section, {})[key] = dst_val
+def section(text: str, name: str) -> tuple[int, int]:
+    match = re.search(rf"(?m)^{re.escape(name)}:\s*$", text)
+    if not match:
+        raise ValueError(f"section {name!r} not found")
+    next_top_level = re.search(r"(?m)^[^ \t#][^:]*:\s*$", text[match.end():])
+    end = match.end() + (next_top_level.start() if next_top_level else len(text[match.end():]))
+    return match.start(), end
 
-with open(dst_path, "w") as f:
-    yaml.dump(merged, f, default_flow_style=False, allow_unicode=True)
+
+def key_block(text: str, section_name: str, key: str) -> tuple[int, int]:
+    start, end = section(text, section_name)
+    block = text[start:end]
+    match = re.search(rf"(?m)^  {re.escape(key)}:\s*.*(?:\n|$)", block)
+    if not match:
+        raise ValueError(f"key {section_name}.{key} not found")
+    absolute_start = start + match.start()
+    tail = text[absolute_start + len(match.group(0)):end]
+    next_key = re.search(r"(?m)^  [^ \t#][^:]*:\s*", tail)
+    absolute_end = absolute_start + len(match.group(0)) + (next_key.start() if next_key else len(tail))
+    return absolute_start, absolute_end
+
+
+dst_start, dst_end = key_block(dst, "day_open", "calendar_ids")
+dst_value = dst[dst_start:dst_end]
+inline_value = re.search(r"(?m)^  calendar_ids:\s*([^#\n]*)", dst_value)
+has_list_items = bool(re.search(r"(?m)^    - ", dst_value))
+is_empty = bool(inline_value and inline_value.group(1).strip() in ("", "[]")) and not has_list_items
+
+if not is_empty:
+    src_start, src_end = key_block(src, "day_open", "calendar_ids")
+    src = src[:src_start] + dst_value + src[src_end:]
+
+dst_path.write_text(src, encoding="utf-8")
 PYEOF
+      then
+        err "Не удалось объединить day-rhythm-config.yaml"
+        return 1
+      fi
     fi
   fi
 
@@ -385,6 +413,11 @@ main() {
 
   log "=== Готово ==="
   log "  backup=$backup_status  reindex=$reindex_status  linear=$linear_status  sessions=$sessions_status"
+
+  if [ "$backup_status" = "fail" ] || [ "$reindex_status" = "fail" ] || \
+     [ "$linear_status" = "fail" ] || [ "$sessions_status" = "fail" ]; then
+    return 1
+  fi
 }
 
 main "$@"
