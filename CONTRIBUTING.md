@@ -72,6 +72,26 @@ Before contributing, understand how IWE is structured:
 
 **Key rule:** User customizations go in `extensions/` and `params.yaml`, never in platform files. This ensures `update.sh` works cleanly.
 
+> Pilot-facing version (Russian, no contribution context assumed): [docs/onboarding/architecture-layers.md](docs/onboarding/architecture-layers.md).
+
+---
+
+## Promoting a Practice (keep the guide in sync)
+
+When you promote a stabilized practice (via `script-promote.sh` / `skill-promote.sh`) that
+changes the *principled* approach to working with IWE — not just an implementation detail —
+flag it so the guide-update pipeline can keep the user-facing guide current:
+
+1. Add a `[guide-impact]` marker to the practice file, **or**
+2. Add `[guide-update: S7.SS_N]` to the commit message, pointing at the affected section.
+
+The pipeline does the rest: it surfaces the change at Week Close so the maintainer can decide
+whether section 7 ("From Use to Creation") of the universal guide needs an update.
+
+**Boundary — guide vs developer-guide.** Content belongs in the guide only if it passes *both* checks:
+it is understandable without knowing specific IWE files/commands, **and** a T3+ reader gets it without
+first reading the developer-guide. If either check fails, it belongs in the developer-guide instead.
+
 ---
 
 ## Pull Request Guidelines
@@ -101,6 +121,23 @@ Before contributing, understand how IWE is structured:
 2. CI runs `setup.sh --validate` automatically
 3. Changes to L1 files require maintainer approval
 4. Extensions and docs usually merge faster
+
+### For External Contributors
+
+`.github/PULL_REQUEST_TEMPLATE.md` (the text that auto-fills your PR body) describes
+IWE's internal WP-Gate pipeline — that's the maintainer's own daily workflow, not a bar
+external PRs are held to. If you're not running that pipeline, delete the auto-filled
+text and use this instead:
+
+- **What changed and why** — a sentence or two
+- **How you tested it** — ran the relevant script/test, or describe the manual check
+- **One concern per PR** — see "What Makes a Good PR" above
+
+Labels [`good first issue`](https://github.com/TserenTserenov/FMT-exocortex-template/labels/good%20first%20issue)
+and [`Linux-portability`](https://github.com/TserenTserenov/FMT-exocortex-template/labels/Linux-portability)
+mark issues that are scoped for a first PR without needing deep context on the rest of
+the platform — the [Linux portability tracking issue](https://github.com/TserenTserenov/FMT-exocortex-template/issues/300)
+is a good starting point if you're coming from a non-macOS install.
 
 ---
 
@@ -137,9 +174,7 @@ See [extensions/README.md](extensions/README.md) for the full extension API, nam
 
 ## Code of Conduct
 
-- Be respectful and constructive
-- Focus on the work, not the person
-- Help others learn — IWE is about amplifying thinking, including in collaboration
+This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md). Be respectful and constructive, focus on the work rather than the person, and help others learn — IWE is about amplifying thinking, including in collaboration.
 
 ---
 

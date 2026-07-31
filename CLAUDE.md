@@ -23,7 +23,7 @@
 1. **WP Gate:** ЛЮБОЕ задание → `memory/protocol-open.md` ДО начала работы. Новый РП → Ритуал согласования → явное «да»/«делаем»/«открывай»; без этого не регистрировать.
 2. **Push:** «заливай»/«запуши»/«закрывай» → commit + push без вопросов, ДО отчёта Закрытия. Любой Close: `git status --short` по всем репо → незафиксированное commit + push ДО следующего шага.
 3. **Close:** Триггер Закрытия → протокол Закрытия → выполнить.
-4. **Pull-on-Touch:** `git pull --rebase` при первом обращении к репо за сессию (все `{{HOME_DIR}}/IWE/*`). Dirty → stash; конфликт → `memory/reference/agent-core.md`.
+4. **Pull-on-Touch:** `git pull --rebase` при первом обращении к репо за сессию (все `{{WORKSPACE_DIR}}/*`). Dirty → stash; конфликт → `memory/reference/agent-core.md`.
 5. **Чеклист-верификация:** Quick/Day Close — sub-agent Haiku R23 сверяет с чеклистом. Исключения: ≤15 мин или без изменений файлов.
 6. **Hooks/Scripts Bypass Gate (S-33):** без явного разрешения не менять `.claude/hooks|scripts/`, `.iwe-runtime/`, `FMT-exocortex-template/`, не обходить хуки; блок хука → bug-файл + пилоту + ждать. → `.claude/rules-lazy/hooks-bypass-gate.md`.
 7. **Автономность:** не спрашивать подтверждения — выполни → отчитайся. Исключения: необратимо-разрушительное; WP Gate Ритуал; choice-question. Полный текст → `.claude/rules-lazy/blocking-rules-full.md` п.7.
@@ -69,7 +69,7 @@
 
 ## Контекстный бюджет IWE (WP-445)
 
-Hot-каркас ≤20K токенов (M1), строгая цель ≤12K (M2). Изменил файл из `hot-files.list` (оба CLAUDE.md, rules/*.md) → перед коммитом `scripts/verify-context-budget.sh`.
+Hot-каркас ≤20K токенов (M1), строгая цель ≤12K (M2). Изменил файл из `hot-files.list` (оба CLAUDE.md, rules/*.md) → перед коммитом `{{IWE_TEMPLATE}}/scripts/verify-context-budget.sh`.
 
 ## 7. Обновление этого файла
 
@@ -92,7 +92,7 @@ Hot-каркас ≤20K токенов (M1), строгая цель ≤12K (M2)
 
 ## State-Transition Gate — CRITICAL
 
-**Перед любым нетривиальным действием или РП назвать целевой переход состояния пользователя** `{тип состояния, из→в}` (WP-457) — **применимо, если в `DS-strategy/docs/state-axes-registry.yaml` описаны оси состояний** (авторский артефакт, не шипится в шаблон по умолчанию). Если файл есть — типы только из него, допустимы только `gate_ready: true`; ссылка на declared FSM-owner обязательна, свободный текст не принимается; нет ссылки или тип не `gate_ready` → действие = inventory → СТОП/отложить. **Файла нет (типовая установка)** → гейт неактивен, действовать по остальным Pre-action Gates без остановки. Модель осей (авторский пример) → `archive/wp-contexts/WP-457/CONCEPT-user-states.md §5`; cross-axis → `memory/reference/agent-core.md`.
+**Перед любым нетривиальным действием или РП назвать целевой переход состояния пользователя** `{тип состояния, из→в}` (WP-457) — **применимо, если в `{{GOVERNANCE_REPO}}/docs/state-axes-registry.yaml` описаны оси состояний** (авторский артефакт, не шипится в шаблон по умолчанию). Если файл есть — типы только из него, допустимы только `gate_ready: true`; ссылка на declared FSM-owner обязательна, свободный текст не принимается; нет ссылки или тип не `gate_ready` → действие = inventory → СТОП/отложить. **Файла нет (типовая установка)** → гейт неактивен, действовать по остальным Pre-action Gates без остановки. Модель осей (авторский пример) → `archive/wp-contexts/WP-457/CONCEPT-user-states.md §5`; cross-axis → `memory/reference/agent-core.md`.
 
 ## Git Staging — CRITICAL
 
@@ -108,7 +108,7 @@ Discrepancy found (file ≠ plan, stale content): **report to pilot, do not sile
 
 ## Working Directory
 
-`{{HOME_DIR}}/IWE/`
+`{{WORKSPACE_DIR}}/`
 
 ## Status Reporting — Agent Status Registry (РП-395)
 
@@ -166,7 +166,7 @@ Respond in Russian unless the user writes in English.
 > Элаборации всех пунктов → `memory/reference/agent-core.md`.
 
 - **Без Obsidian (DS-strategy):** просмотр через VS Code.
-- **Комментарии кода — только EN:** весь `{{HOME_DIR}}/IWE/**`; исключение — user-facing строки по языку интерфейса.
+- **Комментарии кода — только EN (решение Андрея, 14.06.2026):** весь `{{WORKSPACE_DIR}}/**`; исключение — user-facing строки по языку интерфейса.
 - **Различения (авторские):** `.claude/rules/distinctions.md` (секция «Авторские») + `memory/distinctions-warm.md` (в т.ч. «Бот = интерфейс, не место агентов»).
 - **Именование:** governance-репо называется `DS-strategy` по умолчанию; рабочая директория `{{HOME_DIR}}/IWE/`.
 - **Extensions Gate (БЛОКИРУЮЩЕЕ):** пользователи кастомизируют ТОЛЬКО `extensions/*.md` + `params.yaml` (правка `.claude/skills/` или `memory/protocol-*.md` = ошибка); автор (`author_mode: true`) редактирует L1 напрямую — авторский IWE = SoT, доставка в FMT через `template-sync.sh`.

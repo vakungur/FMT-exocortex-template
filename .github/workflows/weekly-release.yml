@@ -1,0 +1,86 @@
+name: Weekly Release
+
+# Еженедельно (Вс 20:00 UTC = Пн 00:00 MSK+1) проверяет CHANGELOG.md:
+# если секция [Unreleased] непустая — бампает patch-версию в
+# update-manifest.json и коммитит, затем явно запускает release.yml,
+# который создаёт тег и GitHub Release.
+#
+# Явный запуск (не push-триггер): коммит идёт от github-actions[bot] через
+# стандартный GITHUB_TOKEN, а такие коммиты по политике GitHub не каскадируют
+# в другие workflow (anti-recursion), поэтому release.yml сам не подхватится.
+#
+# Причина: раньше версия бампалась только вручную — паузы между
+# выпусками доходили до 2-3 недель, хотя коммиты в [Unreleased]
+# шли почти ежедневно (см. docs/RELEASE-PROCESS.md).
+
+on:
+  schedule:
+    - cron: '0 20 * * 0'  # Вс 20:00 UTC
+  workflow_dispatch:        # ручной запуск для тестирования
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  weekly-bump:
+    runs-on: ubuntu-latest
+    if: github.repository == 'TserenTserenov/FMT-exocortex-template'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if Unreleased has content
+        id: check
+        run: |
+          BODY=$(awk '/^## \[Unreleased\]/{found=1; next} found && /^## \[/{exit} found{print}' CHANGELOG.md)
+          BODY_TRIMMED=$(echo "$BODY" | sed '/^\s*$/d')
+          if [ -z "$BODY_TRIMMED" ]; then
+            echo "has_content=false" >> "$GITHUB_OUTPUT"
+            echo "[Unreleased] пуст — нечего выпускать."
+          else
+            echo "has_content=true" >> "$GITHUB_OUTPUT"
+            echo "[Unreleased] содержит изменения — бампаем версию."
+          fi
+
+      - name: Bump patch version in manifest
+        if: steps.check.outputs.has_content == 'true'
+        id: bump
+        run: |
+          CURRENT=$(grep -m1 '"version"' update-manifest.json \
+            | sed 's/.*"version"[[:space:]]*:[[:space:]]*"//;s/".*//')
+          MAJOR=$(echo "$CURRENT" | cut -d. -f1)
+          MINOR=$(echo "$CURRENT" | cut -d. -f2)
+          PATCH=$(echo "$CURRENT" | cut -d. -f3)
+          NEW="$MAJOR.$MINOR.$((PATCH + 1))"
+          python3 - "$NEW" <<'EOF'
+          import json, sys
+          with open('update-manifest.json', encoding='utf-8') as f:
+              m = json.load(f)
+          m['version'] = sys.argv[1]
+          with open('update-manifest.json', 'w', encoding='utf-8') as f:
+              json.dump(m, f, ensure_ascii=False, indent=2)
+              f.write('\n')
+          EOF
+          echo "version=$NEW" >> "$GITHUB_OUTPUT"
+          echo "Version bumped: $CURRENT -> $NEW"
+
+      - name: Flush Unreleased section to new version
+        if: steps.check.outputs.has_content == 'true'
+        run: bash scripts/changelog-flush.sh --version "${{ steps.bump.outputs.version }}"
+
+      - name: Commit and push
+        if: steps.check.outputs.has_content == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add update-manifest.json CHANGELOG.md
+          git commit -m "chore(release): weekly auto-bump to v${{ steps.bump.outputs.version }}"
+          git push origin main
+
+      - name: Trigger Release workflow
+        if: steps.check.outputs.has_content == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run release.yml --ref main

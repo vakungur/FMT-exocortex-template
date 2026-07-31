@@ -1,6 +1,6 @@
 ---
 schema_version: 1
-updated_at: 2026-06-04T14:08:18Z
+updated_at: 2026-07-19T06:33:41Z
 ---
 # promotion-status.yaml — журнал промоций артефактов из author IWE в FMT
 # see WP-7/PZ-6 (peer-session 2026-05-29-20)
@@ -116,4 +116,208 @@ promotions:
     source_sha: ""
     fmt_sha: ""
     promoted_at: 2026-06-04T14:08:18Z
+    verified_in_clean_env: na
+  - artifact_path: .claude/skills/diagnose
+    type: skill
+    source_sha: ""
+    fmt_sha: ""
+    promoted_at: 2026-06-08T06:52:13Z
+    verified_in_clean_env: na
+  - artifact_path: .claude/styles/s0-core.md
+    type: style
+    source_sha: "8f9bb38"
+    fmt_sha: ""
+    promoted_at: 2026-06-14T07:44:46Z
+    verified_in_clean_env: true
+  - artifact_path: .claude/styles/p05-core.md
+    type: style
+    source_sha: "8f9bb38"
+    fmt_sha: ""
+    promoted_at: 2026-06-14T07:44:47Z
+    verified_in_clean_env: true
+  - artifact_path: .claude/skills/artifactor
+    type: skill
+    source_sha: ""
+    fmt_sha: ""
+    promoted_at: 2026-06-16T08:31:50Z
+    verified_in_clean_env: na
+  - artifact_path: .claude/skills/skill-creator
+    type: skill
+    source_sha: ""
+    fmt_sha: ""
+    promoted_at: 2026-06-16T09:16:36Z
+    verified_in_clean_env: na
+  - artifact_path: .claude/skills/bottleneck-pick
+    type: skill
+    source_sha: ""
+    fmt_sha: ""
+    promoted_at: 2026-06-16T18:42:58Z
+    verified_in_clean_env: na
+  - artifact_path: .claude/skills/agent-fault
+    type: skill
+    source_sha: ""
+    fmt_sha: ""
+    promoted_at: 2026-06-17T07:45:20Z
+    verified_in_clean_env: na
+  - artifact_path: .claude/skills/iwe-restore
+    type: skill
+    source_sha: ""
+    fmt_sha: ""
+    promoted_at: 2026-06-17T07:55:42Z
+    verified_in_clean_env: na
+  - artifact_path: .claude/skills/vdv
+    type: skill
+    source_sha: ""
+    fmt_sha: ""
+    promoted_at: 2026-06-17T13:18:00Z
+    verified_in_clean_env: na
+  - artifact_path: .claude/skills/consent
+    type: skill
+    source_sha: ""
+    fmt_sha: ""
+    promoted_at: 2026-06-17T13:18:11Z
+    verified_in_clean_env: na
+  - artifact_path: .claude/skills/w-reflection
+    type: skill
+    source_sha: ""
+    fmt_sha: ""
+    promoted_at: 2026-06-17T13:18:23Z
+    verified_in_clean_env: na
+  - artifact_path: .claude/skills/lesson-close
+    type: skill
+    source_sha: ""
+    fmt_sha: ""
+    promoted_at: 2026-06-17T13:18:35Z
+    verified_in_clean_env: na
+  - artifact_path: .claude/skills/platform-bottleneck
+    type: skill
+    source_sha: ""
+    fmt_sha: ""
+    promoted_at: 2026-06-17T13:18:46Z
+    verified_in_clean_env: na
+  - artifact_path: .claude/skills/fpf
+    type: skill
+    source_sha: ""
+    fmt_sha: ""
+    promoted_at: 2026-06-17T13:19:09Z
+    verified_in_clean_env: na
+  - artifact_path: .claude/skills/day-close
+    type: skill
+    source_sha: ""
+    fmt_sha: ""
+    promoted_at: 2026-06-17T15:10:55Z
+    verified_in_clean_env: na
+  - artifact_path: .claude/skills/verify
+    type: skill
+    source_sha: ""
+    fmt_sha: ""
+    promoted_at: 2026-06-17T15:11:28Z
+    verified_in_clean_env: na
+  - artifact_path: .claude/skills/wp-new
+    type: skill
+    source_sha: ""
+    fmt_sha: ""
+    promoted_at: 2026-06-17T15:11:39Z
+    verified_in_clean_env: na
+  - artifact_path: .claude/skills/archgate
+    type: skill
+    source_sha: ""
+    fmt_sha: ""
+    promoted_at: 2026-06-17T15:12:02Z
+    verified_in_clean_env: na
+  - artifact_path: .claude/skills/iwe-bug-report
+    type: skill
+    source_sha: ""
+    fmt_sha: ""
+    promoted_at: 2026-06-19T13:27:02Z
+    verified_in_clean_env: na
+  - artifact_path: .claude/skills/month-close
+    type: skill
+    source_sha: ""
+    fmt_sha: ""
+    promoted_at: 2026-06-20T16:51:10Z
+    verified_in_clean_env: na
+  - artifact_path: .claude/skills/local-llm
+    type: skill
+    source_sha: ""
+    fmt_sha: ""
+    promoted_at: 2026-06-23T05:11:01Z
+    verified_in_clean_env: na
+  - artifact_path: CLAUDE.md (§1 Лестница принципов)
+    type: rule
+    source_sha: ""
+    fmt_sha: ""
+    promoted_at: 2026-07-04T05:29:49Z
+    verified_in_clean_env: na
+  - artifact_path: memory/repo-type-rules.md (Лестница принципов секция)
+    type: rule
+    source_sha: ""
+    fmt_sha: ""
+    promoted_at: 2026-07-04T05:29:49Z
+    verified_in_clean_env: na
+  - artifact_path: .claude/process-pattern-catalog.yaml
+    type: catalog
+    source_sha: ""
+    fmt_sha: ""
+    promoted_at: 2026-07-04T05:29:49Z
+    verified_in_clean_env: true
+  - artifact_path: memory/protocol-work.md (§1a Микрошаговая собранность)
+    type: protocol
+    source_sha: ""
+    fmt_sha: ""
+    promoted_at: 2026-07-04T05:29:49Z
+    verified_in_clean_env: na
+  - artifact_path: .claude/skills/archgate (Шаг 4.6 DRR Adequacy Pass)
+    type: skill
+    source_sha: ""
+    fmt_sha: ""
+    promoted_at: 2026-07-04T05:29:49Z
+    verified_in_clean_env: na
+  - artifact_path: .claude/templates/drr-template.md
+    type: rule
+    source_sha: ""
+    fmt_sha: ""
+    promoted_at: 2026-07-04T05:29:49Z
+    verified_in_clean_env: na
+  - artifact_path: .claude/rules/distinctions.md (TPF ≠ DS)
+    type: rule
+    source_sha: ""
+    fmt_sha: ""
+    promoted_at: 2026-07-04T05:29:49Z
+    verified_in_clean_env: na
+  - artifact_path: .claude/rules-lazy/drift-guard.md
+    type: rule
+    source_sha: eb41d3d
+    fmt_sha: ""
+    promoted_at: 2026-07-11T14:45:00Z
+    verified_in_clean_env: na
+  - artifact_path: .claude/rules-lazy/new-files-guard.md
+    type: rule
+    source_sha: eb41d3d
+    fmt_sha: ""
+    promoted_at: 2026-07-11T14:45:00Z
+    verified_in_clean_env: na
+  - artifact_path: .claude/rules-lazy/wp-stop-list.md
+    type: rule
+    source_sha: eb41d3d
+    fmt_sha: ""
+    promoted_at: 2026-07-11T14:45:00Z
+    verified_in_clean_env: na
+  - artifact_path: .claude/rules-lazy/hooks-bypass-gate.md
+    type: rule
+    source_sha: 0d1ddf3
+    fmt_sha: ""
+    promoted_at: 2026-07-11T15:10:00Z
+    verified_in_clean_env: na
+  - artifact_path: .claude/rules-lazy/integration-gate.md
+    type: rule
+    source_sha: eb41d3d
+    fmt_sha: ""
+    promoted_at: 2026-07-11T15:10:00Z
+    verified_in_clean_env: na
+  - artifact_path: .claude/skills/test-skill
+    type: skill
+    source_sha: ""
+    fmt_sha: ""
+    promoted_at: 2026-07-19T06:32:43Z
     verified_in_clean_env: na

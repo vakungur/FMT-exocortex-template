@@ -110,6 +110,11 @@ jobs:
           echo "sha=$PREV_SHA" >> $GITHUB_OUTPUT
           echo "ver=$PREV_VER" >> $GITHUB_OUTPUT
           echo "skip=false" >> $GITHUB_OUTPUT
+      - name: Check rename coverage (issue #218)
+        if: steps.prev.outputs.skip != 'true'
+        run: |
+          git show "${{ steps.prev.outputs.sha }}:update-manifest.json" > /tmp/prev-manifest.json
+          python3 scripts/check-manifest-rename-coverage.py /tmp/prev-manifest.json update-manifest.json
       - name: Upgrade simulation — checkout prev → smoke → checkout HEAD → validate
         if: steps.prev.outputs.skip != 'true'
         run: |
@@ -126,6 +131,78 @@ jobs:
           bash setup/smoke-test-fresh-install.sh
           echo "PASS: upgrade ${{ steps.prev.outputs.ver }} → HEAD не ломает контракт"
 
+  # Vendored guide-kit copy: the tree under guide-kit/ is derived-only — a
+  # byte-identical slice of a tagged iwesys/guide-kit release, pinned by
+  # scripts/guide-kit-sync-state.yaml (WP-483 Ф4). In-place edits of the copy
+  # (the "edited the wrong clone" failure mode on dev machines) must go red
+  # here, not be discovered by users after delivery.
+  guide-kit-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check vendored guide-kit copy matches its pinned source tag
+        run: |
+          STATE=scripts/guide-kit-sync-state.yaml
+          if [ ! -f "$STATE" ] && [ ! -d guide-kit ]; then
+            echo "SKIP: guide-kit not vendored yet (no state file, no copy)"
+            exit 0
+          fi
+          if [ -f "$STATE" ] && [ ! -d guide-kit ]; then
+            echo "FAIL: $STATE present but guide-kit/ is missing — broken sync?"
+            exit 1
+          fi
+          if [ ! -f "$STATE" ] && [ -d guide-kit ]; then
+            echo "FAIL: guide-kit/ present without provenance ($STATE) — was scripts/guide-kit-sync.sh bypassed?"
+            exit 1
+          fi
+          SRC=$(grep -m1 '^source_repo:' "$STATE" | sed 's/^source_repo:[[:space:]]*//')
+          TAG=$(grep -m1 '^tag:' "$STATE" | sed 's/^tag:[[:space:]]*//')
+          if [ -z "$SRC" ] || [ -z "$TAG" ]; then
+            echo "FAIL: cannot parse source_repo/tag from $STATE"
+            exit 1
+          fi
+          TMP=$(mktemp -d)
+          git clone --quiet --depth 1 --branch "$TAG" "$SRC" "$TMP"
+          # A moved (force-retagged) upstream tag is a different failure than an
+          # in-place edit of the copy — without this check the diff below would
+          # blame the wrong side ("edited the copy") for an upstream re-tag.
+          PINNED=$(grep -m1 '^commit:' "$STATE" | sed 's/^commit:[[:space:]]*//')
+          ACTUAL=$(git -C "$TMP" rev-parse HEAD)
+          if [ -n "$PINNED" ] && [ "$PINNED" != "$ACTUAL" ]; then
+            echo "FAIL: tag $TAG was moved upstream (state pins $PINNED, tag now points to $ACTUAL)."
+            echo "  Re-run scripts/guide-kit-sync.sh to re-pin, or restore the original tag upstream."
+            exit 1
+          fi
+          rm -rf "$TMP/.git" "$TMP/.github"
+          if diff -r "$TMP" guide-kit; then
+            echo "PASS: guide-kit/ is byte-identical to $SRC@$TAG"
+          else
+            echo "FAIL: guide-kit/ drifted from $SRC@$TAG."
+            echo "  Never edit the copy in place — change the source repo, release a tag,"
+            echo "  re-run scripts/guide-kit-sync.sh."
+            exit 1
+          fi
+      # continue-on-error: freshness is advisory by design (consensus: warning,
+      # not a blocker) — a network hiccup in ls-remote must not redden main.
+      - name: Warn when a newer guide-kit release exists (freshness)
+        continue-on-error: true
+        run: |
+          STATE=scripts/guide-kit-sync-state.yaml
+          if [ ! -f "$STATE" ]; then
+            echo "SKIP: guide-kit not vendored yet"
+            exit 0
+          fi
+          SRC=$(grep -m1 '^source_repo:' "$STATE" | sed 's/^source_repo:[[:space:]]*//')
+          TAG=$(grep -m1 '^tag:' "$STATE" | sed 's/^tag:[[:space:]]*//')
+          # Stable releases only — sort -V ranks v0.2.0-rc1 above v0.2.0.
+          LATEST=$(git ls-remote --tags --refs "$SRC" | awk -F/ '{print $NF}' \
+            | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
+          if [ -n "$LATEST" ] && [ "$LATEST" != "$TAG" ]; then
+            echo "::warning::vendored guide-kit is at $TAG, latest release is $LATEST — run scripts/guide-kit-sync.sh"
+          else
+            echo "PASS: vendored guide-kit is at the latest release ($TAG)"
+          fi
+
   shellcheck:
     runs-on: ubuntu-latest
     steps:
@@ -140,13 +217,27 @@ jobs:
           # Пред-существующие warnings (SC2034 unused vars от export-pattern, SC1090
           # source non-constant, SC2155 declare-and-assign, etc) — информативны,
           # не блокируют. При желании ужесточить — поднять до warning.
+          # guide-kit/ is a vendored byte-identical release slice (WP-483) —
+          # the drift gate forbids in-place fixes, so linting it here would
+          # deadlock two blocking gates; upstream CI lints the source instead.
           FAIL=0
           while IFS= read -r -d '' f; do
             if ! shellcheck -S error "$f"; then
               FAIL=1
             fi
-          done < <(find . -name "*.sh" -type f -print0)
+          done < <(find . -path ./guide-kit -prune -o -name "*.sh" -type f -print0)
           exit $FAIL
+
+  # WP-5 Ubuntu-audit факт #4/#6: docs/PLATFORM-COMPAT.md listed the safe
+  # patterns for macOS-only constructs (osascript, launchctl, date -v, etc.)
+  # but nothing enforced them — every concrete bug this audit found was a
+  # case the checklist already named. Turns the checklist into a gate.
+  platform-compat:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check docs/PLATFORM-COMPAT.md constructs are guarded
+        run: bash scripts/check-platform-compat.sh
 
   validate:
     runs-on: ubuntu-latest
@@ -168,6 +259,13 @@ jobs:
       # только при staged .claude/settings.json) и ручной запуск.
       - name: Run validate-fmt-scripts (author-specific hardcodes & conventions)
         run: bash scripts/validate-fmt-scripts.sh
+
+      # issue #291: путь в бэктиках платформенной части CLAUDE.md (start..SYNC-CORE-END,
+      # доставляется на 100% установок через update.sh §1-7 + Agent Core) обязан
+      # существовать в репо или в update-manifest.json — иначе это мёртвая ссылка на
+      # каждой пользовательской установке, не только у автора.
+      - name: Check CLAUDE.md platform-section links resolve (issue #291)
+        run: python3 scripts/check-claude-md-links.py --strict
 
       # CI-only check: MCP — серверы подключаются через claude.ai/settings/connectors
       - name: Check MCP documentation
@@ -249,12 +347,29 @@ jobs:
           rm -rf "$TMP"
           exit $FAIL
 
-      # B2 gap closure: проверяем что все файлы репо покрыты update-manifest.json.
-      # Новый файл без записи в manifest = обновление не доедет до пользователей.
-      # Исправление: добавить в manifest["files"] или manifest["excluded_paths"].
+      # B2 gap closure: проверяем что update-manifest.json синхронизирован с git tree.
+      # verify-manifest.sh запускает generate-manifest.sh и сравнивает с текущим.
+      # При рассинхроне показывает diff и инструкцию по фиксу.
       - name: Check manifest completeness (B2)
         run: |
-          git ls-files | python3 scripts/check-manifest-coverage.py update-manifest.json
+          bash scripts/verify-manifest.sh
+
+      # setup.sh ↔ update.sh parity. Root (29 июня, peer-session 2026-06-29-03):
+      # rules-lazy доставлялся через update.sh, но отсутствовал в setup.sh for-loop —
+      # fresh install терял компонент. check-setup-update-parity существовал (WP-315),
+      # но НЕ был подключён к CI (dormant guard), а его regex-контракт не покрывал
+      # измерение «список компонентов». Подключаем оба: контракт-паттерны + set-diff.
+      - name: Check setup/update parity contract
+        run: bash scripts/check-setup-update-parity.sh
+      - name: Check setup/update component-set parity
+        run: bash scripts/check-component-parity.sh
+
+      # seed-снапшоты (WP-5 Ubuntu-audit, 2026-07-22 факт #3): script-promote.sh
+      # промотирует личный скрипт → scripts/, но НЕ пишет в seed/strategy/scripts/ —
+      # без этого гейта дрейф молчит, пока новый пользователь не упрётся в старый
+      # пайплайн (нашлось: day-open-pipeline.sh/scaffold.sh разошлись на сотни строк).
+      - name: Check seed snapshots match scripts/ (drift guard)
+        run: bash scripts/check-seed-drift.sh
 
       # 7. Только допустимые placeholders
       - name: Check placeholders are valid

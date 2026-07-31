@@ -296,8 +296,11 @@ check_pattern() {
     local exclude="${3:-}"
 
     for file in $STAGED_SH; do
-        # Skip PLATFORM-COMPAT.md references
+        # Skip documentation and the dedicated compatibility checker itself:
+        # both intentionally contain the patterns this lightweight text scan
+        # detects. The checker validates executable code separately.
         [ "$(basename "$file")" = "PLATFORM-COMPAT.md" ] && continue
+        [ "$file" = "scripts/check-platform-compat.sh" ] && continue
 
         # Check staged content (not working tree)
         local matches

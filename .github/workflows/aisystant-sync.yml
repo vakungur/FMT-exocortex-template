@@ -1,0 +1,65 @@
+name: Aisystant Sync (Pipeline 1, pull-only)
+
+# WP-415 Pipeline 1: personal RU template (this repo) -> private RU repos in
+# the aisystant org, Variant A pull-only (pilot decision 2026-07-13).
+# Architecture: DS-ecosystem-development/0.OPS/0.9.Inbox/WP-415-pipeline-architecture.md
+#
+# Manual dispatch only, on purpose -- unlike translate-sync.yml (Pipeline 2,
+# push-triggered), this workflow never fires on a plain push. Two reasons:
+#   1. aisystant-sync-targets.yaml ships with an empty target list (the real
+#      aisystant repo name(s) are not decided yet), so an auto-triggered run
+#      would only ever produce a "nothing to do" no-op today.
+#   2. Once targets ARE configured, a live publish should stay an explicit,
+#      reviewed action -- this is a one-way push into a team-shared repo in
+#      a different org, not a private staging branch.
+# scripts/copy-to-aisystant.py enforces its own dry-run-by-default and
+# --confirm=PUBLISH gate underneath this; the `live` input below is a second,
+# workflow-level version of the same gate.
+#
+# This workflow never creates/deletes a repository and never touches org or
+# repo settings, permissions, or billing -- see the SAFETY CONTRACT comment
+# at the top of copy-to-aisystant.py.
+
+on:
+  workflow_dispatch:
+    inputs:
+      live:
+        description: 'Publish for real (unchecked = dry-run report only)'
+        type: boolean
+        default: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history not needed, tree of HEAD is enough)
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install pyyaml pytest
+
+      - name: Run pipeline tests
+        run: pytest scripts/tests/test_copy_to_aisystant.py -q
+
+      - name: Report configured targets (always runs, no writes)
+        run: python3 scripts/copy-to-aisystant.py
+
+      - name: Generate aisystant installation token
+        if: ${{ inputs.live }}
+        id: aisystant_token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.CANON_SYNC_APP_ID }}
+          private-key: ${{ secrets.CANON_SYNC_APP_KEY }}
+          owner: aisystant
+
+      - name: Publish (live run only, requires explicit workflow_dispatch input)
+        if: ${{ inputs.live }}
+        env:
+          GH_TOKEN: ${{ steps.aisystant_token.outputs.token }}
+        run: python3 scripts/copy-to-aisystant.py --live --confirm=PUBLISH

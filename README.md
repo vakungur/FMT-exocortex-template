@@ -1,14 +1,15 @@
 # IWE — Intellectual Work Environment
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.35.3-blue.svg)](CHANGELOG.md)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows%20(WSL)-lightgrey.svg)]()
+[![Version](https://img.shields.io/badge/version-0.36.0-blue.svg)](CHANGELOG.md)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows%20(Git%20Bash)-lightgrey.svg)]()
+[![EN sync](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/TserenTserenov/FMT-exocortex-template/en-draft/badge-data.json)](https://github.com/TserenTserenov/FMT-exocortex-template/tree/en-draft)
+
+<img src="https://raw.githubusercontent.com/TserenTserenov/FMT-exocortex-template/main/docs/assets/orz-cycle.svg" alt="Open, Work, Close — the same cycle at every scale: session, day, week" width="100%">
 
 > Операционная система интеллектуальной работы. Ваши знания. Ваш опыт. Ваша среда — работает поверх любой AI-платформы.
 >
 > **Тип репозитория:** `Base/Форматы` (FMT) — шаблон-дистрибутив. После форка становится вашей персональной средой с ИИ-агентами.
-
-**[English version](README.en.md)**
 
 ---
 
@@ -40,8 +41,7 @@
 
 > **Ключевой принцип: экзоскелет, не протез.** IWE усиливает ваше мышление, а не заменяет его. После каждой сессии вы становитесь компетентнее, а не просто получаете результат. Подробнее: [principles-vs-skills.md](docs/principles-vs-skills.md).
 
-<details>
-<summary>Ключевые термины IWE</summary>
+## Ключевые термины IWE
 
 | Термин | Что это |
 |--------|---------|
@@ -52,8 +52,6 @@
 | **Стратег** | ИИ-агент, который автоматически составляет планы дня/недели и отслеживает прогресс |
 
 Термины и аббревиатуры описаны в `memory/` и инструкциях репозитория.
-
-</details>
 
 ---
 
@@ -193,9 +191,12 @@ multiplier_enabled: true    # Мультипликатор IWE
 | **[SETUP-GUIDE.md](docs/SETUP-GUIDE.md)** | Пошаговая установка от чистого компьютера. Требования, режимы (core/full), проверка |
 | **[LEARNING-PATH.md](docs/LEARNING-PATH.md)** | Путь изучения IWE: архитектура, принципы, протоколы, Pack, роли |
 | **[DATA-POLICY.md](docs/DATA-POLICY.md)** | Политика данных: что собирается, где хранится, как удалить |
+| **[DATA-RESIDENCY.md](docs/DATA-RESIDENCY.md)** | Принцип резидентности: данные, которые вы приносите в IWE извне (здоровье, календарь, рабочее время) — куда им можно и нельзя уходить |
 | **[IWE-HELP.md](docs/IWE-HELP.md)** | Быстрая справка и FAQ |
 | **[principles-vs-skills.md](docs/principles-vs-skills.md)** | Почему принципы важнее навыков: генеративная иерархия |
 | **[CHANGELOG.md](CHANGELOG.md)** | История изменений шаблона |
+
+> Два документа покрывают смежные темы: `DATA-POLICY.md` — про данные, которые платформа собирает о вас; `DATA-RESIDENCY.md` — про данные, которые вы сами приносите в IWE извне.
 
 ---
 
@@ -214,7 +215,7 @@ A: Да, три агента поддерживаются из коробки:
 Минимальная установка (`setup.sh --core`) работает без привязки к конкретному агенту.
 
 **Q: Работает ли на Linux/Windows?**
-A: Да. Ядро работает на любой ОС. Автоматизация Стратега: macOS — launchd, Linux — cron, Windows — WSL. Подробнее: [SETUP-GUIDE.md](docs/SETUP-GUIDE.md).
+A: Да. Ядро работает на любой ОС. Автоматизация Стратега: macOS — launchd, Linux — systemd (пользовательские юниты), облачный вариант (не завязан на ОС) — GitHub Actions. Windows: `setup.sh` и ядро запускаются через Git Bash (ставится вместе с Git for Windows) — WSL не обязателен; WSL остаётся резервным путём для тех, кто предпочитает полноценный Linux-слой. Не проверено вживую на реальном Windows (нет Windows-раннера в CI) — подробнее и честная оговорка: [SETUP-GUIDE.md](docs/SETUP-GUIDE.md) § Windows.
 
 **Q: Что если компьютер выключен или спит — автоматика остановится?**
 A: Cloud Scheduler (GitHub Actions) работает в облаке даже при выключенном компьютере. Для локальных агентов: скрипты автоматически предотвращают сон на время работы (macOS: `caffeinate`, Linux: `systemd-inhibit`). Для ноутбуков рекомендуется настроить автоматическое пробуждение и запрет idle sleep — см. [SETUP-GUIDE.md](docs/SETUP-GUIDE.md).
@@ -235,7 +236,7 @@ A: Нет. Шаблон — готовая конфигурация. Устан�
 A: Да. Claude Code + CLAUDE.md + memory/ работают полностью. Стратег — автоматизация планирования. Без него планируете вручную.
 
 **Q: Как настроить день стратегирования?**
-A: В `memory/day-rhythm-config.yaml` измените `strategy_day: monday` на нужный день. Подробнее: [LEARNING-PATH.md](docs/LEARNING-PATH.md).
+A: В `memory/day-rhythm-config.yaml` измените `strategy_day: sunday` на нужный день. Подробнее: [LEARNING-PATH.md](docs/LEARNING-PATH.md).
 
 **Q: Клонирование попало в `~` вместо `~/IWE`?**
 A: Все команды установки нужно выполнять в одном терминале. Если открыли новый — он начинает из `~`. Удалите папку из `~` и повторите с `cd ~/IWE`. Подробнее: [SETUP-GUIDE.md](docs/SETUP-GUIDE.md).
@@ -277,6 +278,8 @@ IWE — это среда, которую строишь в одиночку. Н
 ## Участие в разработке
 
 См. [CONTRIBUTING.md](CONTRIBUTING.md) — как помочь проекту.
+
+**Разработчикам команды IWE (уровень T4+):** единая точка входа — [С чего начать разработчику](docs/developer/). За 10 минут поймёшь конвейер разработки (6 станций, двойной выход) и сделаешь первую задачу.
 
 ---
 
