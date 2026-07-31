@@ -1,0 +1,14 @@
+{
+  "session_id": "test-session",
+  "transcript_path": null,
+  "cwd": "/workspace",
+  "hook_event_name": "PreToolUse",
+  "model": "test-model",
+  "turn_id": "test-turn",
+  "permission_mode": "default",
+  "tool_name": "Bash",
+  "tool_use_id": "safe-call",
+  "tool_input": {
+    "command": "git push --force-with-lease origin feature && test -f README.md"
+  }
+}

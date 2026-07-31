@@ -1,0 +1,14 @@
+{
+  "session_id": "test-session",
+  "transcript_path": null,
+  "cwd": "/workspace",
+  "hook_event_name": "PreToolUse",
+  "model": "test-model",
+  "turn_id": "test-turn",
+  "permission_mode": "default",
+  "tool_name": "Bash",
+  "tool_use_id": "force-push-call",
+  "tool_input": {
+    "command": "test -f README.md && git -C \"/workspace/repo\" push origin main --force"
+  }
+}

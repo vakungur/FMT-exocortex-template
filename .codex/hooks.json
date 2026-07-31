@@ -1,0 +1,45 @@
+{
+  "description": "IWE lifecycle adapters for Codex.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel)/scripts/codex-hooks/session-start-trash-check.sh\"",
+            "timeout": 10,
+            "statusMessage": "Проверяю безопасное удаление",
+            "additionalContextLimit": 2500
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel)/scripts/codex-hooks/user-prompt-wp-reminder.sh\"",
+            "timeout": 10,
+            "statusMessage": "Загружаю правила открытия IWE",
+            "additionalContextLimit": 2500
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel)/scripts/codex-hooks/pre-tool-use-destructive-guard.sh\"",
+            "timeout": 10,
+            "statusMessage": "Проверяю безопасность команды"
+          }
+        ]
+      }
+    ]
+  }
+}

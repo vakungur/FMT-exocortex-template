@@ -70,7 +70,7 @@ with open('update-manifest.json') as f:
     data = json.load(f)
 for entry in data.get('files', []):
     p = entry.get('path') if isinstance(entry, dict) else entry
-    if p and not os.path.isfile(p):
+    if p and not os.path.exists(p):
         print(p)
 ")
     if [ -n "$MISSING" ]; then
