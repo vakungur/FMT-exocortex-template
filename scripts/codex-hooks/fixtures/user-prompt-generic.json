@@ -1,0 +1,10 @@
+{
+  "session_id": "test-session",
+  "transcript_path": null,
+  "cwd": "/workspace",
+  "hook_event_name": "UserPromptSubmit",
+  "model": "test-model",
+  "turn_id": "test-turn",
+  "permission_mode": "default",
+  "prompt": "Продолжим настройку Codex."
+}

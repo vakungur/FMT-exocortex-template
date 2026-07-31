@@ -27,14 +27,8 @@ IWE="${IWE_ROOT:-$HOME/IWE}"
 
 # --- Определить governance-репо ---
 # Приоритет: (1) явная переменная IWE_GOVERNANCE_REPO → (2) стандартный DS-strategy.
-GOV_REPO="${IWE_GOVERNANCE_REPO:-}"
-if [[ -z "$GOV_REPO" && -d "$IWE/DS-strategy" ]]; then
-  GOV_REPO="DS-strategy"
-fi
-if [[ -z "$GOV_REPO" ]]; then
-  echo "ERROR: IWE_GOVERNANCE_REPO not set and DS-strategy not found in $IWE" >&2
-  exit 1
-fi
+# Проверка существования репозитория выполняется ниже, до любого изменения данных.
+GOV_REPO="${IWE_GOVERNANCE_REPO:-DS-strategy}"
 
 STRATEGY="$IWE/$GOV_REPO"
 if [[ ! -d "$STRATEGY" ]]; then

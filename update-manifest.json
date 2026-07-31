@@ -3,6 +3,156 @@
   "description": "Манифест платформенных файлов FMT-exocortex-template. Используется update.sh для доставки обновлений.",
   "files": [
     {
+      "path": ".agents/skills/_template"
+    },
+    {
+      "path": ".agents/skills/agent-fault"
+    },
+    {
+      "path": ".agents/skills/apply-captures"
+    },
+    {
+      "path": ".agents/skills/archgate"
+    },
+    {
+      "path": ".agents/skills/artifactor"
+    },
+    {
+      "path": ".agents/skills/audit-docs"
+    },
+    {
+      "path": ".agents/skills/audit-installation"
+    },
+    {
+      "path": ".agents/skills/author-mode"
+    },
+    {
+      "path": ".agents/skills/bottleneck-pick"
+    },
+    {
+      "path": ".agents/skills/check-secret"
+    },
+    {
+      "path": ".agents/skills/consent"
+    },
+    {
+      "path": ".agents/skills/day-close"
+    },
+    {
+      "path": ".agents/skills/day-open"
+    },
+    {
+      "path": ".agents/skills/decompose"
+    },
+    {
+      "path": ".agents/skills/diagnose"
+    },
+    {
+      "path": ".agents/skills/discovery-session"
+    },
+    {
+      "path": ".agents/skills/extend"
+    },
+    {
+      "path": ".agents/skills/fpf"
+    },
+    {
+      "path": ".agents/skills/integration-gate"
+    },
+    {
+      "path": ".agents/skills/iwe-bug-report"
+    },
+    {
+      "path": ".agents/skills/iwe-restore"
+    },
+    {
+      "path": ".agents/skills/iwe-rules-review"
+    },
+    {
+      "path": ".agents/skills/iwe-update"
+    },
+    {
+      "path": ".agents/skills/ke"
+    },
+    {
+      "path": ".agents/skills/kimi-peer-writer"
+    },
+    {
+      "path": ".agents/skills/lesson-close"
+    },
+    {
+      "path": ".agents/skills/local-llm"
+    },
+    {
+      "path": ".agents/skills/month-close"
+    },
+    {
+      "path": ".agents/skills/org-dev"
+    },
+    {
+      "path": ".agents/skills/pack-creator"
+    },
+    {
+      "path": ".agents/skills/pack-new"
+    },
+    {
+      "path": ".agents/skills/peer-conversation"
+    },
+    {
+      "path": ".agents/skills/personal-guide-render"
+    },
+    {
+      "path": ".agents/skills/personal-guide-start"
+    },
+    {
+      "path": ".agents/skills/platform-bottleneck"
+    },
+    {
+      "path": ".agents/skills/residency-gate"
+    },
+    {
+      "path": ".agents/skills/restore-exocortex"
+    },
+    {
+      "path": ".agents/skills/run-protocol"
+    },
+    {
+      "path": ".agents/skills/setup-wakatime"
+    },
+    {
+      "path": ".agents/skills/skill-creator"
+    },
+    {
+      "path": ".agents/skills/strategy-session"
+    },
+    {
+      "path": ".agents/skills/think"
+    },
+    {
+      "path": ".agents/skills/transcribe"
+    },
+    {
+      "path": ".agents/skills/vdv"
+    },
+    {
+      "path": ".agents/skills/verify"
+    },
+    {
+      "path": ".agents/skills/verify-hypotheses"
+    },
+    {
+      "path": ".agents/skills/w-reflection"
+    },
+    {
+      "path": ".agents/skills/week-close"
+    },
+    {
+      "path": ".agents/skills/week-close-pilot"
+    },
+    {
+      "path": ".agents/skills/wp-new"
+    },
+    {
       "path": ".claude/agents/wp-sync-actualizer.md"
     },
     {
@@ -427,6 +577,12 @@
     },
     {
       "path": ".claude/templates/drr-template.md"
+    },
+    {
+      "path": ".codex/config.toml"
+    },
+    {
+      "path": ".codex/hooks.json"
     },
     {
       "path": ".githooks/commit-msg"
@@ -1240,6 +1396,54 @@
     },
     {
       "path": "scripts/close-wp.sh"
+    },
+    {
+      "path": "scripts/codex-hooks/_common.sh"
+    },
+    {
+      "path": "scripts/codex-hooks/fixtures/pre-tool-clean.json"
+    },
+    {
+      "path": "scripts/codex-hooks/fixtures/pre-tool-force-push-short.json"
+    },
+    {
+      "path": "scripts/codex-hooks/fixtures/pre-tool-force-push.json"
+    },
+    {
+      "path": "scripts/codex-hooks/fixtures/pre-tool-invalid.json"
+    },
+    {
+      "path": "scripts/codex-hooks/fixtures/pre-tool-reset-hard.json"
+    },
+    {
+      "path": "scripts/codex-hooks/fixtures/pre-tool-rm-rf.json"
+    },
+    {
+      "path": "scripts/codex-hooks/fixtures/pre-tool-safe.json"
+    },
+    {
+      "path": "scripts/codex-hooks/fixtures/session-start.json"
+    },
+    {
+      "path": "scripts/codex-hooks/fixtures/user-prompt-day-open.json"
+    },
+    {
+      "path": "scripts/codex-hooks/fixtures/user-prompt-generic.json"
+    },
+    {
+      "path": "scripts/codex-hooks/fixtures/user-prompt-postmit.json"
+    },
+    {
+      "path": "scripts/codex-hooks/pre-tool-use-destructive-guard.sh"
+    },
+    {
+      "path": "scripts/codex-hooks/session-start-trash-check.sh"
+    },
+    {
+      "path": "scripts/codex-hooks/smoke-test.sh"
+    },
+    {
+      "path": "scripts/codex-hooks/user-prompt-wp-reminder.sh"
     },
     {
       "path": "scripts/codex-peer-adapter.sh"

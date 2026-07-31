@@ -1,0 +1,33 @@
+# Codex project configuration for an IWE workspace.
+# Authentication and provider settings remain user-local in ~/.codex/config.toml.
+
+project_doc_fallback_filenames = ["CLAUDE.md"]
+project_doc_max_bytes = 65536
+
+[features]
+hooks = true
+
+[shell_environment_policy]
+inherit = "core"
+set = { IWE_AGENT_ID = "codex" }
+
+# This is the only remote IWE server enabled by default. It requires OAuth and
+# stays unavailable until the user authenticates it with `codex mcp login`.
+[mcp_servers.iwe-knowledge]
+url = "https://mcp.aisystant.com/mcp"
+auth = "oauth"
+oauth_resource = "https://mcp.aisystant.com"
+enabled = true
+required = false
+startup_timeout_sec = 60
+tool_timeout_sec = 120
+default_tools_approval_mode = "writes"
+
+[mcp_servers.iwe-knowledge.tools.knowledge_search]
+approval_mode = "approve"
+
+[mcp_servers.iwe-knowledge.tools.knowledge_get_document]
+approval_mode = "approve"
+
+[mcp_servers.iwe-knowledge.tools.knowledge_list_sources]
+approval_mode = "approve"
