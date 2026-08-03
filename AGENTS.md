@@ -1,6 +1,9 @@
 # AGENTS.md
 
-> **Сгенерировано `scripts/sync-agent-instructions.sh` (WP-394 Ф4.2). НЕ РЕДАКТИРОВАТЬ ВРУЧНУЮ.**
+> **Для Kimi Code:** этот файл читается автоматически при открытии репо в VS Code. Не редактируй вручную.
+> Кастомизация для Kimi → `extensions/` или `AGENTS-agent-blocks.md`. Claude читает `CLAUDE.md`. Hermes — через Aisystant MCP.
+>
+> **Сгенерировано `scripts/sync-agent-instructions.sh`. НЕ РЕДАКТИРОВАТЬ ВРУЧНУЮ.**
 > Общее ядро → блок `<!-- SYNC-CORE -->` в `CLAUDE.md`. Агент-специфика → `AGENTS-agent-blocks.md`.
 
 
@@ -8,13 +11,22 @@
 
 **ЛЮБОЕ задание → протокол Открытия → ДО начала работы.** При создании нового РП: объявить роль, работу, РП, класс верификации, метод, оценку, модель. Дождаться согласования пилота.
 
-## State-Transition Gate — CRITICAL
-
-**Перед любым нетривиальным действием или РП назвать целевой переход состояния пользователя** `{тип состояния, из→в}` (WP-457) — **применимо, если в `{{GOVERNANCE_REPO}}/docs/state-axes-registry.yaml` описаны оси состояний** (авторский артефакт, не шипится в шаблон по умолчанию). Если файл есть — типы только из него, допустимы только `gate_ready: true`; ссылка на declared FSM-owner обязательна, свободный текст не принимается; нет ссылки или тип не `gate_ready` → действие = inventory → СТОП/отложить. **Файла нет (типовая установка)** → гейт неактивен, действовать по остальным Pre-action Gates без остановки. Модель осей (авторский пример) → `archive/wp-contexts/WP-457/CONCEPT-user-states.md §5`; cross-axis → `memory/reference/agent-core.md`.
-
 ## Git Staging — CRITICAL
 
-**NEVER `git add -u`, `git add .`, `git add -A`** — подхватывают изменения ДРУГИХ агентов (Kimi/Hermes работают параллельно) → неверная атрибуция. Стейджить только конкретные файлы; перед коммитом `git diff --cached --name-only`, лишнее — `git restore --staged`. Примеры → `memory/reference/agent-core.md`.
+**NEVER use `git add -u`, `git add .`, or `git add -A`.**
+
+These commands pick up staged/unstaged changes from OTHER agents (Claude Code works in the same repo simultaneously). Wrong attribution and accidental commits of other agents' work result.
+
+**Always stage only specific files you edited:**
+```bash
+# Correct
+git add path/to/specific-file.md
+
+# FORBIDDEN — captures other agents' work
+git add -u
+git add .
+git add -A
+```
 
 ## Artifact Naming
 
@@ -22,33 +34,36 @@
 
 ## Drift Reporting
 
-Discrepancy found (file ≠ plan, stale content): **report to pilot, do not silently fix.** Format: "Found drift: [what] in [file]. Should I fix it?" Fix only if explicitly instructed.
+If you discover a discrepancy (file doesn't match plan, stale content, inconsistency):
+- **Report to pilot, do not silently fix.**
+- Format: "Found drift: [what is inconsistent] in [file]. Should I fix it?"
+- Only fix if explicitly instructed.
 
 ## Working Directory
 
-`{{WORKSPACE_DIR}}/`
-
-## Status Reporting — Agent Status Registry (РП-395)
-
-**Primary (обязательно):** в начале задачи `agent_status_update(agent=<claude-code|kimi|hermes>, status=working, task=<кратко>, files=[...])`; по завершении — `status=idle`. Статусы: `idle|working|peer-session|blocked`; пилот видит всех через `agent_status_list`. Командный режим (`repo=`) и fail-safe скрипт → `memory/reference/agent-core.md`.
-
-## Long Operation Protocol — 180 s Silence Threshold
-
-**Не молчи больше 180 секунд.** Операция >180с → ДО запуска сообщить: что запускается, длительность, шаг X из Y, id фоновой задачи. >180с тишины → микро-отчёт «Всё ещё работаю. Текущий шаг: [X из Y]. Следующий: [Z].» Касается всего, где пилот видит пустое «Thinking» (bash, subagent, фоновые задачи, Close-протоколы).
-
-## WP-REGISTRY Naming — CRITICAL
-
-**Колонка «Название» в WP-REGISTRY содержит ТОЛЬКО имя артефакта ≤80 символов** — без дат, ссылок на сессии, метрик, SHA и прочих служебных данных.
-
-**Куда писать остальное:** итог закрытия → `## Закрытие` в `archive/wp-contexts/`; фазы/прогресс → frontmatter `inbox/WP-NNN/WP-NNN.md` (всегда папка — WP-434), при смене статуса фаз обновлять frontmatter, НЕ имя реестра. Полный текст и примеры ✅/❌ → `memory/reference/agent-core.md`.
+`{{HOME_DIR}}/IWE/`
 
 ## WP Context Scope — Umbrella РП
 
-Umbrella-РП с `agent_scope: open-only` (WP-5, WP-7) — читать **только** фазы `pending`/`in_progress`/`blocked`; архивные — не читать без явного запроса пользователя.
+Для зонтичных (umbrella) РП с `agent_scope: open-only` в frontmatter:
+- Читать **только** фазы со статусом `pending` / `in_progress` / `blocked`
+- Архивные (`done`, `closed`, `defer`) — **не читать** без явного запроса пользователя
+- Исключение: если пользователь даёт задание с указанием конкретной архивной фазы
+
+Применяется к: WP-5, WP-7.
 
 ## Calendar Events — CRITICAL
 
-**All agent-created reminders and calendar events must be scheduled BEFORE 09:00 AM** (позже — только с явного одобрения пилота). Создано после 09:00 по ошибке → удалить + пересоздать до 09:00 + сообщить пилоту (шаги → `memory/reference/agent-core.md`).
+**All platform reminders and calendar events created by the agent must be scheduled BEFORE 09:00 AM.**
+
+This includes: task reminders, follow-up events, template migration tasks, any agent-generated calendar entries.
+
+**Never** schedule agent-created events at or after 09:00 without explicit pilot approval.
+
+If an event is created after 09:00 by mistake:
+1. Delete the incorrect event immediately
+2. Recreate it before 09:00 on the same day, or on the next available pre-09:00 slot
+3. Report the error to the pilot
 
 ## Language
 
@@ -56,40 +71,15 @@ Respond in Russian unless the user writes in English.
 
 ## Response Style — Pilot-Facing
 
-Правила понятного ответа пилоту (полный текст — `memory/feedback_response_clarity_for_pilot.md`) — в чате, синтезе отчётов и пост-отчётах после действий.
+Агент должен применять правила понятного ответа пилоту (полный текст — `memory/feedback_response_clarity_for_pilot.md`, HOT) в ответах чата, синтезе отчётов и пост-отчётах после действий.
 
-**Channel detector:** технический стиль — стенограммы peer-сессий, commit, PR; «на пальцах» — чат с пилотом (если тот сам не пишет `grep`/`git`/пути/SHA) и §1-§4 синтеза report.md.
+**Channel detector:** технический стиль — для стенограмм ходов peer-сессий, commit-сообщений, PR; режим «на пальцах» — для чата с пилотом (если пилот сам не пишет `grep`/`git`/пути/SHA) и для §1-§4 синтеза report.md.
 
-**Eleven rules (A1-A11), short:** A1 путь файла не подлежащее (только в скобках после русского глагола); A2 английский термин только после русского описания в скобках; A3 первое упоминание колонки/функции — расшифровка одним словом; A4 pre-flight: примет ли пилот решение по этой фразе; A5 ЧТО до КАК; A6 одна стрелка-следствие на предложение; A7 «сделал → эффект», `<details>` — только при наличии нужных пилоту деталей или по его явному запросу; A7.1 журнал (SHA, коммиты, дефекты) — только в файл отчёта, не в чат; A8 журнал процесса по умолчанию не писать; A9 channel detector; A10 английские маркеры статуса (exit/PASS/SHA) → русские слова; A11 активный залог на ошибках и находках.
+**Self-check после peer-сессии:** перед ответом пилоту — переключи канал на разговорный стиль (A1-A11). Turn-файлы технические (для агентов), report.md разговорный (для пилота).
 
-## Code Style — Engineering (DP.SC.172)
-
-
-**P-правила, short:** P0 перед коммитом — форматтер+линтер репо (механику закрывает инструмент); P1 тест без проверки наблюдаемого результата запрещён (`assert True` — запах); P2 третье повторение → функция, не `locals()[str]`; P3 мёртвую ветку/enum удалять, не «для совместимости»; P4 `except: pass` без логирования запрещён; P5 длинную функцию со смешанными обязанностями / булевы флаги-режимы — разбить. Граница: жёсткие запреты (`git add -A`, секреты) — в PACK-agent-rules (AR.*), не здесь. (Доставка/детекторы по агенту → `memory/reference/agent-core.md`.)
+**Eleven rules (A1-A11), short:** A1 путь файла не подлежащее (только в скобках после русского глагола); A2 английский термин только после русского описания в скобках; A3 первое упоминание колонки/функции — расшифровка одним словом; A4 pre-flight: примет ли пилот решение по этой фразе; A5 ЧТО до КАК; A6 одна стрелка-следствие на предложение; A7 формат «сделал → эффект → детали под спойлером»; A8 журнал процесса по умолчанию не писать; A9 channel detector; A10 английские маркеры статуса (exit/PASS/SHA) → русские слова; A11 активный залог на ошибках и находках.
 
 
-
-## OpenAI Codex
-
-Если агент — **Codex от OpenAI**:
-
-- Не представляйся Claude, Kimi или Hermes и не используй их идентичность в
-  реестрах статуса либо в авторстве коммитов.
-- Общие правила из `CLAUDE.md` обязательны; блоки, явно предназначенные для
-  другого агента, к Codex не относятся.
-- Не применяй Kimi-шаблон коммита, Kimi-трейлер, Kimi-модели и Kimi headless
-  настройки. Не добавляй трейлер авторства другого агента.
-- Используй только доступные в текущей сессии инструменты. Не имитируй MCP
-  Gateway, блокировки файлов или другие недоступные возможности.
-- Если реестр статусов не поддерживает `codex`, сообщай статус в чате, не
-  подменяя идентичность другого агента.
-- IWE-навыки доступны Codex через `.agents/skills/`; это ссылки на
-  `.claude/skills/`, где остаётся единственный источник инструкций.
-- Команда пилота вида `/имя [аргументы]` означает IWE-навык: используй
-  `$имя` или, если список Codex сократил метаданные, прочитай
-  `.agents/skills/имя/SKILL.md` и выполни его только доступными средствами.
-- Если такого `SKILL.md` нет или необходимый инструмент недоступен, не
-  утверждай, что навык запущен: назови ограничение и следующий шаг.
 
 ## Commit Attribution
 

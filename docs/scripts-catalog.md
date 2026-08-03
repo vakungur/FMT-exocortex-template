@@ -104,3 +104,4 @@
 | `wp-sync-bundle.sh` | `.claude/scripts/wp-sync-bundle.sh` | детерминированный bundler контекста РП для sync-фазы WP Gate |
 
 _Всего скриптов: 97_
+

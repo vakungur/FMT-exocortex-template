@@ -114,7 +114,7 @@ python3 ~/.claude/skills/residency-gate/residency-gate.py list day-open
 
 ```yaml
 functions:
-  day-open:
+  day-open: 
     2.2_inbound_daily-summary: {status: granted, granted_at: 2026-07-11T12:00:00Z}
     2.1_inbound_digital-twin: {status: denied, denied_reason: user denied, denied_at: 2026-07-11T12:05:00Z}
 ```
@@ -143,17 +143,17 @@ source ~/.claude/hooks/residency-gate-init.sh "day-open" "$HOME/.claude/skills/d
 def get_digital_twin():
     """Fetch user's digital twin from platform (with lazy consent check)."""
     import subprocess
-
+    
     result = subprocess.run([
-        "bash",
+        "bash", 
         "~/.claude/hooks/residency-gate-lazy.sh",
         "render-guides", "2.1", "inbound", "digital-twin"
     ], capture_output=True)
-
+    
     if result.returncode != 0:
         logger.info("User denied access to digital twin")
         return None
-
+    
     # Access granted, fetch data
     return fetch_from_platform()
 ```
@@ -212,3 +212,4 @@ python3 ~/.claude/skills/residency-gate/residency-gate.py list render-guides | j
 - [ ] Протестировать отказ согласия (denied case)
 - [ ] Документировать потребности в README функции
 - [ ] При релизе — пилот выполняет `grant` или `deny` для каждой нужды
+

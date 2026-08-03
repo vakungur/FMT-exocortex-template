@@ -851,3 +851,4 @@ rm -rf ~/IWE/DS-strategy
 
 > **Нужна помощь?** Спроси бота @aist_me_bot — он ищет по базе знаний платформы (Pack).
 > **Техническая проблема?** Открой issue: [github.com/aisystant/FMT-exocortex-template/issues](https://github.com/TserenTserenov/FMT-exocortex-template/issues)
+

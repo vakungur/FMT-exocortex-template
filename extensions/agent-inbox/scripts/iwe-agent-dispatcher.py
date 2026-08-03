@@ -2,8 +2,12 @@
 """
 iwe-agent-dispatcher.py — диспетчер Agent Inbox IWE (WP-324 Ф8).
 
-Канонический источник определяется процессом синхронизации шаблона. Не
-привязывайте этот файл к личному репозиторию или рабочей директории автора.
+SoT (Source-of-Truth): ~/IWE/<governance-repo>/scripts/iwe-agent-dispatcher.py
+Все другие копии должны синхронизироваться отсюда:
+  - FMT-exocortex-template/scripts/
+  - FMT-exocortex-template/extensions/agent-inbox/scripts/
+  - DS-autonomous-agents/scripts/
+Синхронизация: `cp <canonical> <target>` + `git add -u && git commit -m "sync iwe-agent-dispatcher"`
 
 Канал: headless `claude -p` (Claude Code CLI в неинтерактивном режиме).
 Не зависит от RemoteTrigger v1→v2 translation bug (см. bugs/bug-2026-05-17).
@@ -80,9 +84,7 @@ COMMIT_AUTHOR_EMAIL = os.environ.get("IWE_DISPATCHER_AUTHOR_EMAIL", "noreply@exa
 # Git Data API (atomic write blob+tree+commit+ref). Без TOKEN — fallback на старый
 # stateful session-mode через локальный клон (--workdir обязателен).
 IWE_DISPATCHER_GITHUB_TOKEN = os.environ.get("IWE_DISPATCHER_GITHUB_TOKEN", os.environ.get("GITHUB_TOKEN", ""))
-# API mode intentionally has no default repository: each installation must opt in
-# explicitly with an owner/repository value, rather than writing to the author's repo.
-IWE_DISPATCHER_GITHUB_REPO = os.environ.get("IWE_DISPATCHER_GITHUB_REPO", "")
+IWE_DISPATCHER_GITHUB_REPO = os.environ.get("IWE_DISPATCHER_GITHUB_REPO", "your-username/your-governance-repo")
 IWE_DISPATCHER_GITHUB_BRANCH = os.environ.get("IWE_DISPATCHER_GITHUB_BRANCH", "main")
 IWE_DISPATCHER_ETAG_DB = os.path.expanduser(
     os.environ.get("IWE_DISPATCHER_ETAG_DB", "~/.iwe/dispatcher-etags.db")
@@ -414,7 +416,7 @@ def _guard_repo_dir_is_isolated(repo_dir: Path) -> None:
     """Отказ вместо тихого reset --hard / identity-перезаписи в живой рабочей копии пилота.
 
     bug-2026-07-25: --workdir ~/IWE (вместо изолированного /tmp/...) заставил ensure_workdir()
-    переписать git user.name/email в живой рабочей копии и оставить это на будущее — коммиты
+    переписать git user.name/email в ~/IWE/<governance-repo> и оставить это на будущее — коммиты
     из живой рабочей копии стали подписываться как диспетчер. reset --hard в том же вызове
     мог бы стереть незакоммиченную работу пилота.
     """
@@ -718,6 +720,29 @@ def _classify_claude_failure(stderr: str, stdout: str) -> str:
 # invariant). See: inbox/WP-428/adr-unified-bot-router.md (v2).
 # =============================================================================
 
+_SECURITY_WHITELIST_PATH = Path(__file__).parent / "config" / "pipeline-security-whitelist.yaml"
+
+
+def _load_disallowed_tools() -> list[str]:
+    """WP-503 Ф9 (АрхГейт Ф5 NBR №3): headless Executor не должен повторить
+    инцидент WP-7 23.07 (`railway list_variables` без фильтра напечатал ~90
+    боевых секретов). Читает файл заново на каждый вызов (не кэширует) —
+    расширение whitelist не требует перезапуска диспетчера.
+
+    Пустой список при отсутствующем/битом файле — это НЕ fail-open дыра:
+    отсутствие --disallowedTools просто не сужает права сверх дефолтных
+    permission-настроек CLI, whitelist добавляет ограничения, не снимает их."""
+    import yaml
+    try:
+        with open(_SECURITY_WHITELIST_PATH, encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+    except (OSError, yaml.YAMLError) as e:
+        log(f"security whitelist не загружен ({_SECURITY_WHITELIST_PATH}): {e}, продолжаю без --disallowedTools", "WARN")
+        return []
+    tools = data.get("disallowed_tools") or []
+    return [str(t) for t in tools if isinstance(t, str)]
+
+
 class Executor:
     """Base agentic executor: builds the headless CLI command for one runtime."""
 
@@ -736,7 +761,11 @@ class ClaudeCodeExecutor(Executor):
     supports_heartbeat = True
 
     def build_cmd(self, prompt: str, model: str) -> list[str]:
-        return ["claude", "-p", prompt, "--model", model, "--output-format", "text"]
+        cmd = ["claude", "-p", prompt, "--model", model, "--output-format", "text"]
+        disallowed = _load_disallowed_tools()
+        if disallowed:
+            cmd += ["--disallowedTools", ",".join(disallowed)]
+        return cmd
 
 
 class KimiCliExecutor(Executor):
@@ -2253,14 +2282,6 @@ def session_mode_main_api(dry_run: bool) -> None:
 
     if not IWE_DISPATCHER_GITHUB_TOKEN:
         log("IWE_DISPATCHER_GITHUB_TOKEN not set — cannot run API mode", "ERROR")
-        return
-
-    if not IWE_DISPATCHER_GITHUB_REPO:
-        log(
-            "IWE_DISPATCHER_GITHUB_REPO not set — cannot run API mode; "
-            "configure an owner/repository value explicitly",
-            "ERROR",
-        )
         return
 
     etag_conn = _gh_etag_db()
