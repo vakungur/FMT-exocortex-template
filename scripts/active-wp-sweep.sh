@@ -170,7 +170,7 @@ _git_activity_cell() {
     hit=$(timeout 5 git -C "$repo_dir" log \
       --since="${GIT_DAYS} days ago" --oneline --grep="WP-${wp_num}" --all 2>/dev/null | head -1)
     if [[ -n "$hit" ]]; then git_info="$hit"; break; fi
-  done < <(find "$IWE" -maxdepth 2 -name ".git" -type d 2>/dev/null)
+  done < <(find "$IWE" -mindepth 2 -maxdepth 3 -name ".git" -type d 2>/dev/null)
   if [[ -n "$git_info" ]]; then echo "${git_info:0:55}"; else echo "нет (${GIT_DAYS}д)"; fi
 }
 

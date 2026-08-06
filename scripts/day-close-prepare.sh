@@ -33,17 +33,30 @@ memory_files() {
   fi
 }
 
+# Repositories may live directly under the workspace or under one organizing
+# directory such as personal-projects/. The depth is intentionally bounded so
+# vendor trees and dependency caches are not traversed.
+repo_dirs() {
+  local git_dir repo_dir
+  while IFS= read -r git_dir; do
+    repo_dir=$(dirname "$git_dir")
+    case "$repo_dir" in
+      *node_modules*|*.venv*) continue ;;
+    esac
+    printf '%s\n' "$repo_dir"
+  done < <(find "$WORKSPACE_DIR" -mindepth 2 -maxdepth 3 -type d -name .git 2>/dev/null)
+}
+
 dirty_scan() {
   if [ -x "$IWE_TEMPLATE/scripts/check-dirty-repos.sh" ]; then
     bash "$IWE_TEMPLATE/scripts/check-dirty-repos.sh" 2>/dev/null
   else
     local d n
-    for d in "$WORKSPACE_DIR"/*/; do
-      [ -d "$d/.git" ] || continue
+    while IFS= read -r d; do
       n=$(git -C "$d" status --porcelain 2>/dev/null | wc -l | tr -d ' ')
-      [ "$n" -gt 0 ] && echo "dirty: $(basename "$d") ($n files)"
-    done
-    echo "(fallback scan — top-level repos only)"
+      [ "$n" -gt 0 ] && echo "dirty: ${d#"$WORKSPACE_DIR"/} ($n files)"
+    done < <(repo_dirs)
+    echo "(fallback scan — repos up to two directory levels)"
   fi
 }
 
@@ -86,17 +99,16 @@ echo "=== DAY CLOSE DIGEST $TODAY $(date +%H:%M) ==="
 
 echo "--- 1. COMMITS TODAY (filtered) ---"
 FOUND=0
-for d in "$WORKSPACE_DIR"/*/; do
-  [ -d "$d/.git" ] || continue
+while IFS= read -r d; do
   commits=$(git -C "$d" log --since="today 00:00" --oneline --no-merges 2>/dev/null \
     | grep -vE "^[a-f0-9]+ (docs|chore|ci|style|perf|test)(\(|:| )" \
     | grep -vE "memory/|\.claude/rules/|template-sync|backup|reindex" || true)
   if [ -n "$commits" ]; then
-    echo "=== $(basename "$d") ==="
+    echo "=== ${d#"$WORKSPACE_DIR"/} ==="
     echo "$commits"
     FOUND=1
   fi
-done
+done < <(repo_dirs)
 [ "$FOUND" -eq 0 ] && echo "(no substantive commits today)"
 
 echo "--- 2. DIRTY REPOS ---"

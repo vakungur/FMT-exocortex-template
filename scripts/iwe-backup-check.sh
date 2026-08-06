@@ -324,7 +324,7 @@ echo ""
 
 # ---------- Раздел 3: Git-hygiene ----------
 
-echo "## 3. Git-hygiene (24 репо)"
+echo "## 3. Git-hygiene (репозитории workspace)"
 echo ""
 
 DIRTY_COUNT=0
@@ -332,9 +332,9 @@ UNPUSHED_COUNT=0
 echo "| Репо | Uncommitted | Unpushed |"
 echo "|---|---|---|"
 
-for gitdir in $(find "$IWE_ROOT" -maxdepth 2 -name ".git" -type d 2>/dev/null); do
+while IFS= read -r gitdir; do
     repo_dir=$(dirname "$gitdir")
-    repo_name=$(basename "$repo_dir")
+    repo_name=${repo_dir#"$IWE_ROOT"/}
 
     # Пропускаем node_modules / .venv вложенные .git
     if echo "$repo_dir" | grep -qE '(node_modules|\.venv)'; then
@@ -358,7 +358,7 @@ for gitdir in $(find "$IWE_ROOT" -maxdepth 2 -name ".git" -type d 2>/dev/null); 
     if [ "$uncommitted" != "0" ] || [ "$unpushed" != "0" ]; then
         printf "| \`%s\` | %s | %s |\n" "$repo_name" "$uncommitted" "$unpushed"
     fi
-done
+done < <(find "$IWE_ROOT" -mindepth 2 -maxdepth 3 -name ".git" -type d 2>/dev/null)
 echo ""
 
 if [ "$DIRTY_COUNT" -eq 0 ] && [ "$UNPUSHED_COUNT" -eq 0 ]; then

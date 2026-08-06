@@ -55,6 +55,28 @@ def test_digest_emits_all_sections(tmp_path):
     assert "END DIGEST" in result.stdout
 
 
+def test_digest_discovers_repo_under_organizing_directory(tmp_path):
+    ws = _make_workspace(tmp_path)
+    repo = ws / "personal-projects" / "sample"
+    repo.mkdir(parents=True)
+    subprocess.run(["git", "init", "-b", "main", str(repo)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.name", "Test User"], check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.email", "test@example.invalid"], check=True)
+    (repo / "artifact.md").write_text("nested\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "--", "artifact.md"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-m", "feat: nested project marker"],
+        check=True,
+        capture_output=True,
+    )
+
+    result = _run(ws, tmp_path)
+
+    assert result.returncode == 0, result.stderr
+    assert "=== personal-projects/sample ===" in result.stdout
+    assert "feat: nested project marker" in result.stdout
+
+
 def test_verify_fails_when_day_not_closed(tmp_path):
     ws = _make_workspace(tmp_path)
     result = _run(ws, tmp_path, "--verify")
