@@ -76,14 +76,29 @@ do_backup() {
   fi
 
   # Mirror *.md/*.yaml/*.yml from auto-memory; --delete prunes files removed upstream.
+  # exocortex/ is a multi-writer destination: extensions/, fault-profile, hindsight,
+  # and legacy decision logs are primary data written by other platform mechanisms.
+  # Root-anchored excludes are therefore ownership boundaries, not copy masks. Rsync
+  # protects excluded receiver paths from --delete unless --delete-excluded is used.
   # CLAUDE.md is excluded so the workspace copy below isn't deleted by --delete.
   # -L (copy-links) dereferences symlinks so target content is copied, not the link —
   # prevents a self-referencing ELOOP symlink from recurring here (WP-7 DOC8).
   # day-rhythm-config.yaml is excluded here and handled separately via merge (see below)
   # to preserve user-configured keys (e.g. calendar_ids) from being overwritten by template defaults.
-  rsync -aL --delete \
+  # issue #343: --include='*/' must come first — without it the trailing --exclude='*'
+  # also excludes directories, so rsync never descends into memory/ subfolders and the
+  # backup silently misses e.g. memory/reference/agent-core.md while reporting success.
+  # -m goes with it: --include='*/' alone recreates the source's ENTIRE directory tree
+  # in the backup, including .git/ internals whose files the final --exclude drops —
+  # hundreds of empty dirs plus a fake exocortex/.git. -m prunes the empty ones.
+  rsync -aLm --delete \
     --exclude='CLAUDE.md' \
     --exclude='day-rhythm-config.yaml' \
+    --exclude='/extensions/***' \
+    --exclude='/agent-fault-profile/***' \
+    --exclude='/hindsight/***' \
+    --exclude='/decisions/***' \
+    --include='*/' \
     --include='*.md' --include='*.yaml' --include='*.yml' \
     --exclude='*' \
     "$MEMORY_SRC/" "$EXOCORTEX_DST/"

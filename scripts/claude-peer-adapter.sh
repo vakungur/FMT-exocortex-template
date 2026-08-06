@@ -51,7 +51,7 @@ while [[ $# -gt 0 ]]; do
       exit 64
       ;;
     --permission-mode)
-      echo "ERROR: permission mode is fixed to plan for claude-peer-adapter.sh." >&2
+      echo "ERROR: permission mode is fixed to dontAsk for claude-peer-adapter.sh." >&2
       exit 64
       ;;
     *)               shift ;;
@@ -61,23 +61,54 @@ done
 # Модель передаётся только при явном выборе вызывающего агента. Адаптер не
 # назначает и не подменяет конструктивную реализацию напарника.
 
-# WP-394 Ф2.4: --exclude-dynamic-system-prompt-sections moves per-machine sections
-# (cwd, env, memory paths, git status) from system prompt to first user message.
-# → stable byte-identical prefix across turns → higher cross-turn prompt-cache reuse.
-# Only applies with default system prompt (no --system-prompt passed here).
+# WP-510 Ф17: text-only must be fail-closed. `plan` plus a deny-list did not
+# provide that boundary: Claude could still call Agent, whose child discovered
+# ToolSearch and MCP, then the parent timed out without stdout. `--safe-mode`
+# removes project customizations/hooks/MCP, while the EMPTY `--tools` allow-list
+# disables every tool namespace (including future tools not known today).
+# `--no-session-persistence` prevents this ephemeral reviewer from leaving a
+# resumable conversation. --add-dir remains forbidden above.
 #
-# `plan` plus an explicit deny-list makes the peer a text-only reviewer at the
-# Claude Code tool-policy layer. --add-dir expands file access and must never be
-# used as a claimed sandbox. Sensitive material still requires an OS-level
-# isolated runner; this adapter is not such a runner.
+# This is still a Claude Code policy boundary, not an OS sandbox. Sensitive
+# material requires a separately isolated runner and explicit pilot approval.
 #
 # perl alarm 300: 5-minute hard timeout, same as kimi-peer-adapter.sh.
 # On timeout: SIGALRM → exit 142 → caller sees exit≠0 + empty file → reports to pilot.
-perl -e 'alarm 300; exec @ARGV' -- \
+CLAUDE_STDERR="$(mktemp)"
+trap 'rm -f "$CLAUDE_STDERR"' EXIT
+
+CLAUDE_OUTPUT=$(perl -e 'alarm 300; exec @ARGV' -- \
   "$CLAUDE_BIN" -p \
-  --exclude-dynamic-system-prompt-sections \
-  --permission-mode plan \
+  --safe-mode \
+  --tools "" \
+  --permission-mode dontAsk \
   --max-turns 1 \
-  --disallowedTools "Read,Edit,Write,Bash,Glob,Grep,WebFetch,WebSearch" \
+  --no-session-persistence \
   ${MODEL_ARG[@]+"${MODEL_ARG[@]}"} \
-  "$@"
+  "$@" 2>"$CLAUDE_STDERR") && CLAUDE_EXIT=0 || CLAUDE_EXIT=$?
+
+# Auth-failure detection (peer-session 2026-08-04-08-wp7-f44-sandbox-review):
+# macOS Keychain can be unreachable from a sandboxed child process (e.g. a
+# Codex workspace-write sandbox) even when the pilot's own Claude Code login
+# is valid — that surfaces as literal "Not logged in" text, not necessarily a
+# non-zero exit. stderr is checked unconditionally (diagnostic channel);
+# stdout only when the process itself also exited non-zero, so a genuine
+# reply that happens to discuss login/auth text isn't misclassified as a
+# failure (this environment discusses login issues often).
+AUTH_PATTERN='Not logged in|Please run.*login'
+if grep -qE "$AUTH_PATTERN" "$CLAUDE_STDERR" 2>/dev/null || \
+   { [ "$CLAUDE_EXIT" -ne 0 ] && printf '%s' "$CLAUDE_OUTPUT" | grep -qE "$AUTH_PATTERN"; }; then
+  echo "ERROR: Claude peer call looks unauthenticated (Not logged in). Common sandbox/Keychain artifact, not necessarily lost login — verify from a trusted terminal before re-running /login." >&2
+  if [ -s "$CLAUDE_STDERR" ]; then
+    echo "--- claude stderr (tail) ---" >&2
+    tail -20 "$CLAUDE_STDERR" >&2
+  fi
+  exit 4
+fi
+
+# Empty output must stay a zero-byte file (contract: exit≠0 + empty file →
+# caller reports "peer didn't answer") — printf with %s\n would otherwise
+# write a lone newline for a truly empty CLAUDE_OUTPUT, found in cold review
+# of peer-session 2026-08-04-08-wp7-f44-sandbox-review.
+[ -n "$CLAUDE_OUTPUT" ] && printf '%s\n' "$CLAUDE_OUTPUT"
+exit "$CLAUDE_EXIT"

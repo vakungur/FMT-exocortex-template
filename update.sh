@@ -173,6 +173,52 @@ is_author_mode() {
     grep -qE '^author_mode:[[:space:]]*true' "$params_file"
 }
 
+# issue #354: these four files are platform protocols, but older template releases
+# shipped them as owner:user. That legacy marker must not permanently block future
+# platform fixes. Keep the allowlist exact: every other owner:user memory file remains
+# protected by issue #229.
+is_platform_protocol_path() {
+    case "$1" in
+        memory/protocol-open.md|memory/protocol-work.md|memory/protocol-close.md|memory/protocol-month-close.md) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# One-time owner:user -> owner:platform migration. The owner marker in the deployed
+# copy is the idempotency marker: after a successful copy this branch is no longer
+# eligible. Preserve the user's previous version before replacing it, and fail closed
+# if the backup cannot be written. author_mode stays protected because its live memory
+# copy can be the author's unpublished source.
+migrate_platform_protocol() {
+    local fpath="$1" target="$2" source backup
+    source="$SCRIPT_DIR/$fpath"
+
+    is_platform_protocol_path "$fpath" || return 1
+    [ -f "$source" ] && [ -f "$target" ] || return 1
+    [ "$(get_field "$source" owner)" = "platform" ] || return 1
+    [ "$(get_field "$target" owner)" = "user" ] || return 1
+
+    if is_author_mode; then
+        echo "  ⚠ $fpath — author_mode: legacy owner:user copy not migrated. Сверь: diff \"$source\" \"$target\""
+        return 1
+    fi
+
+    backup="$WORKSPACE_DIR/.backups/protocol-owner-migration/${fpath#memory/}"
+    if [ ! -f "$backup" ]; then
+        mkdir -p "$(dirname "$backup")"
+        if ! cp -p "$target" "$backup"; then
+            echo "  ⚠ $fpath — миграция пропущена: не удалось сохранить $backup" >&2
+            return 1
+        fi
+    fi
+    if ! cp "$source" "$target"; then
+        echo "  ⚠ $fpath — миграция пропущена: не удалось обновить рабочую копию" >&2
+        return 1
+    fi
+    echo "  ⟲ $fpath → memory/ (owner:user → platform; прежняя версия: $backup)"
+    return 0
+}
+
 # author_diverged FPATH — author_mode: SCRIPT_DIR — git-клон этого самого шаблона,
 # из которого качается upstream. Git — точный арбитр «locally stale vs автор доработал»,
 # не список защищённых путей (issue #238, тот же класс бага, что стёр 66 файлов —
@@ -218,6 +264,31 @@ WORKSPACE_DIR="$(dirname "$SCRIPT_DIR")"
 # (Step 6) and the early repair-pass (see repair_pass() below, issue #226) can use it.
 CLAUDE_PROJECT_SLUG="$(echo "$WORKSPACE_DIR" | tr '/' '-')"
 CLAUDE_MEMORY_DIR="$HOME/.claude/projects/$CLAUDE_PROJECT_SLUG/memory"
+
+# issue #350: the file lists printed further down cover only the template's own files.
+# A normal run writes to several more places that never appeared in any preview, and
+# users found out by losing an edit. Called from every branch that shows a preview,
+# including the "no changes" one — there a repair-pass still writes to all of these.
+print_extra_write_targets() {
+    echo "Кроме перечисленного, обычный запуск (без --check) также пишет — это зоны возможной перезаписи, пофайлового прогноза для них превью не строит (issue #350):"
+    echo "  • $WORKSPACE_DIR/.claude/ — рабочие копии скиллов, хуков, правил"
+    echo "  • $CLAUDE_MEMORY_DIR — рабочие копии memory-файлов"
+    echo "  • $WORKSPACE_DIR/.iwe-runtime/ — пересобирается целиком из шаблона"
+    echo "  • $WORKSPACE_DIR/.exocortex.env, $SCRIPT_DIR/.claude.md.base, $SCRIPT_DIR/update-manifest.json"
+    echo "  Расхождение рабочей копии с шаблоном чинится независимо от списков выше."
+    echo ""
+}
+
+# fix #205: --check must not mutate update.sh itself. Shared by every --check exit so
+# an added early return cannot quietly skip the guard.
+assert_self_unmutated() {
+    local self_hash_after
+    self_hash_after=$(hash_file "$SCRIPT_DIR/update.sh")
+    if [ "$SELF_HASH_BEFORE" != "$self_hash_after" ]; then
+        echo "ОШИБКА: update.sh мутировал в режиме --check — это баг!" >&2
+        exit 1
+    fi
+}
 
 # === Temp directory ===
 TMPDIR_UPDATE=$(mktemp -d 2>/dev/null || { mkdir -p "/tmp/exocortex-update-$$"; echo "/tmp/exocortex-update-$$"; })
@@ -363,7 +434,9 @@ repair_pass() {
                         echo "  ⟲ $fpath → memory/ (repair)"
                         REPAIRED=$((REPAIRED + 1))
                     elif [ -r "$mem_dst" ] && [ "$(get_field "$mem_dst" owner)" = "user" ]; then
-                        : # issue #229: owner: user в frontmatter — пилот владеет файлом, stale-repair не применяется никогда
+                        if migrate_platform_protocol "$fpath" "$mem_dst"; then
+                            REPAIRED=$((REPAIRED + 1))
+                        fi
                     elif is_personal_config "$fname"; then
                         : # личный L4-конфиг без frontmatter (day-rhythm-config.yaml) — НЕ stale-repair
                     elif is_author_mode; then
@@ -438,6 +511,7 @@ NEW_FILES=()
 NEW_DESCS=()
 UPDATED_FILES=()
 UPDATED_LINES=()
+SKIPPED_DOWNLOAD=()   # issue #350: manifest files whose fetch failed — status unknown, not "unchanged"
 UNCHANGED=0
 CLAUDE_CONFLICTS=0  # unresolved CLAUDE.md merge conflict counter (WP-7)
 # issue #226: a CLAUDE.md conflict must not abort delivery of the rest of the
@@ -477,7 +551,12 @@ while IFS='|' read -r fpath fdesc; do
     REMOTE_FILE="$TMPDIR_UPDATE/files/$fpath"
     mkdir -p "$(dirname "$REMOTE_FILE")"
 
+    # issue #350: a failed download used to `continue` silently — the file landed in
+    # no list at all, not even the UNCHANGED counter, so the preview said nothing about
+    # it while a later run (network back) applied it. "Could not check" is not "up to
+    # date"; it now gets its own list and taints the verdict below.
     if ! curl $CURL_BASE_OPTS $_CURL_SSL_OPT -sSfL "$RAW_BASE/$fpath" -o "$REMOTE_FILE" 2>/dev/null; then
+        SKIPPED_DOWNLOAD+=("$fpath")
         continue
     fi
 
@@ -559,14 +638,48 @@ echo "  Обновления экзокортекса (v$UPSTREAM_VERSION)"
 echo "=========================================="
 echo ""
 
+# issue #350: files whose download failed are reported before any verdict — a partial
+# comparison must never render as "everything is current".
+if [ ${#SKIPPED_DOWNLOAD[@]} -gt 0 ]; then
+    echo "Не удалось проверить (${#SKIPPED_DOWNLOAD[@]}):"
+    for f in "${SKIPPED_DOWNLOAD[@]}"; do
+        printf "  ? %s — файл не скачался, состояние неизвестно\n" "$f"
+    done
+    echo "  Эти файлы могут отличаться от upstream и быть перезаписаны при обычном запуске."
+    echo ""
+fi
+
+if [ "$TOTAL_CHANGES" -eq 0 ] && [ ${#SKIPPED_DOWNLOAD[@]} -gt 0 ]; then
+    # Not "up to date" — merely "no differences among the files we managed to fetch".
+    # The local manifest version is deliberately NOT synced here: bumping it would make
+    # the next `--check --fast` (version-only comparison) report green on the strength
+    # of a comparison that never completed. The repair-pass still runs, though — it is
+    # what fixes a stale workspace (issue #226), and a download hiccup is no reason to
+    # skip it in a real run.
+    print_extra_write_targets
+    echo "⚠ Проверка неполная: различий среди проверенных файлов нет, но ${#SKIPPED_DOWNLOAD[@]} файл(ов) скачать не удалось."
+    echo "  Повторите запуск, когда сеть будет доступна. Версия манифеста намеренно не синхронизирована."
+    if $CHECK_ONLY; then
+        assert_self_unmutated
+    else
+        repair_pass
+    fi
+    exit 0
+fi
+
 if [ "$TOTAL_CHANGES" -eq 0 ]; then
     # issue #226: TOTAL_CHANGES=0 значит SCRIPT_DIR уже совпадает с upstream — но
     # workspace мог остаться stale (прерванный предыдущий запуск). Чиним прямо тут,
     # иначе repair-pass ниже никогда не выполнится (недостижим после этого exit).
     # bug-2026-07-11-update-sh-author-mode-blind-clobber: repair_pass() пишет файлы
     # на диск — под --check (без --fast) это ложное «превью без изменений».
+    # issue #350: это самая частая ветка, и именно в ней превью раньше говорило
+    # «всё актуально» и выходило, а обычный запуск тут же чинил рабочую копию —
+    # писал в .claude/, память и .iwe-runtime/. Перечень адресатов печатается и здесь.
+    print_extra_write_targets
     if $CHECK_ONLY; then
         echo "  ℹ Режим --check: repair-pass пропущен (может чинить workspace, запусти без --check)."
+        assert_self_unmutated
     else
         repair_pass
         # issue #279: TOTAL_CHANGES=0 сравнивает только содержимое файлов, не
@@ -633,13 +746,18 @@ echo "Не затрагиваются:"
 echo "  ✓ memory/MEMORY.md (личная оперативная память)"
 echo "  ✓ CLAUDE.md (3-way merge: ваши правки сохраняются)"
 echo "  ✓ extensions/ (ваши расширения протоколов)"
-echo "  ✓ params.yaml (ваши параметры)"
+# issue #348: params.yaml защищён только когда файл уже существует — на установке,
+# где его нет, он засевается из шаблона. Обещание «не затрагивается» без этой оговорки
+# читалось как «мою правку не тронут», хотя гард проверяет именно наличие файла.
+echo "  ✓ params.yaml (ваши параметры — существующий файл не перезаписывается; отсутствующий засевается из шаблона)"
 echo "  ✓ .secrets/ (ключи)"
 echo "  ✓ .claude/settings.local.json (permissions)"
 echo "  ✓ sessions/00-index.md (журнал peer-сессий)"
 echo "  ✓ personal/ (ваши файлы)"
 echo "  ✓ ${IWE_GOVERNANCE_REPO:-DS-strategy}/ (ваше планирование)"
 echo ""
+
+print_extra_write_targets
 
 if [ "$UNCHANGED" -gt 0 ]; then
     echo "Без изменений: $UNCHANGED файлов"
@@ -650,12 +768,7 @@ fi
 if $CHECK_ONLY; then
     echo "Режим --check: изменения не применяются."
     echo "Для применения: bash update.sh"
-    # Self-integrity guard: verify update.sh was not mutated during the check pass (fix #205)
-    SELF_HASH_AFTER=$(hash_file "$SCRIPT_DIR/update.sh")
-    if [ "$SELF_HASH_BEFORE" != "$SELF_HASH_AFTER" ]; then
-        echo "ОШИБКА: update.sh мутировал в режиме --check — это баг!" >&2
-        exit 1
-    fi
+    assert_self_unmutated
     exit 0
 fi
 
@@ -1134,7 +1247,11 @@ if [ -d "$CLAUDE_MEMORY_DIR" ]; then
                     # every update.sh call (not just repair), so it's the more common path
                     # that was clobbering user-owned memory files.
                     if [ -f "$dst" ] && [ "$(get_field "$dst" owner)" = "user" ]; then
-                        echo "  ✓ $fname — owner: user, не перезаписан"
+                        if migrate_platform_protocol "$f" "$dst"; then
+                            MEM_UPDATED=$((MEM_UPDATED + 1))
+                        elif ! is_platform_protocol_path "$f"; then
+                            echo "  ✓ $fname — owner: user, не перезаписан"
+                        fi
                     elif is_personal_config "$fname" && [ -f "$dst" ]; then
                         echo "  ✓ $fname — личный L4-конфиг, не перезаписан"
                     elif is_author_mode && [ -f "$dst" ]; then
@@ -1439,10 +1556,11 @@ fi
 # These may be stale user customisations or files left over from a renamed skill.
 # Never auto-deletes; always informational only.
 if command -v python3 &>/dev/null && [ -f "$SCRIPT_DIR/update-manifest.json" ]; then
-    ORPHAN_OUTPUT=$(python3 - <<'PYEOF'
-import json, os
+    ORPHAN_OUTPUT=""
+    if ! ORPHAN_OUTPUT=$(python3 - "$SCRIPT_DIR" 2>&1 <<'PYEOF'
+import json, os, sys
 
-script_dir = os.path.dirname(os.path.abspath(__file__))
+script_dir = os.path.realpath(sys.argv[1])
 manifest_path = os.path.join(script_dir, "update-manifest.json")
 
 with open(manifest_path) as f:
@@ -1487,7 +1605,11 @@ for base in L1_DIRS:
 for tag, rel in sorted(orphans):
     print(f"  {tag} {rel}")
 PYEOF
-)
+    ); then
+        echo "  ⚠ Проверка orphan-файлов не выполнена; обновление уже применено и остаётся успешным."
+        echo "$ORPHAN_OUTPUT" | sed 's/^/    /'
+        ORPHAN_OUTPUT=""
+    fi
     if [ -n "$ORPHAN_OUTPUT" ]; then
         echo ""
         echo "⚠  Файлы в L1-директориях не найдены в манифесте (не удалять автоматически):"
