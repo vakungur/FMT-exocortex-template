@@ -136,6 +136,15 @@ run_schema_case() {
     echo "FAIL: schema $case_name produced an unexpected row" >&2
     exit 1
   }
+
+  IWE_ROOT="$case_root" IWE_GOVERNANCE_REPO="strategy" \
+    python3 "$TEMPLATE_ROOT/scripts/build-active-wp.py" > "$case_root/build-active.out"
+
+  grep -Fq "**Schema $case_name**" "$case_strategy/current/active-wp.md" || {
+    cat "$case_strategy/current/active-wp.md" >&2
+    echo "FAIL: schema $case_name was not rendered into active-wp.md" >&2
+    exit 1
+  }
 }
 
 run_schema_case "4" \
@@ -157,6 +166,10 @@ run_schema_case "8" \
 # The live WeekPlan schema uses full names instead of the legacy h/P columns.
 LIVE_WEEKPLAN="$TMPDIR/4/strategy/current/WeekPlan W1.md"
 cat > "$LIVE_WEEKPLAN" <<'WPEOF'
+| Приоритет | РП | Статус | Результат месяца |
+|-----------|----|--------|------------------|
+| Focus | WP-19 | active | Existing |
+
 | # | РП | Бюджет | Статус | Дедлайн | Репо |
 |---|----|---------|--------|---------|------|
 | WP-19 | Existing | 1h | done | — | strategy |
@@ -168,12 +181,19 @@ IWE_ROOT="$TMPDIR/4" IWE_GOVERNANCE_REPO="strategy" \
     --budget "5h" \
     --priority "P2" \
     --repo "personal-projects/ivs-smena" \
+    --result "off-plan (личный)" \
     --no-consent-check \
     > "$TMPDIR/4/weekplan.out" 2>&1
 
 grep -Fqx '| WP-21 | **Live WeekPlan** — [описание] | 5h | pending | — | personal-projects/ivs-smena |' "$LIVE_WEEKPLAN" || {
   cat "$LIVE_WEEKPLAN" >&2
   echo "FAIL: live WeekPlan columns were not populated" >&2
+  exit 1
+}
+
+grep -Fqx '| WP-21 | personal-projects/ivs-smena | off-plan (личный) | pending |' "$TMPDIR/4/strategy/docs/Strategy.md" || {
+  cat "$TMPDIR/4/strategy/docs/Strategy.md" >&2
+  echo "FAIL: Strategy mapping was not added to the target table" >&2
   exit 1
 }
 

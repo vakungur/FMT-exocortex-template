@@ -237,6 +237,12 @@ REGISTRY_SNAPSHOT="$SNAPSHOT_DIR/registry.snapshot"
 WEEKPLAN=$(find "$STRATEGY/current" -maxdepth 1 -name "WeekPlan*.md" 2>/dev/null | sort -r | head -1)
 WEEKPLAN_SNAPSHOT="$SNAPSHOT_DIR/weekplan.snapshot"
 [[ -n "$WEEKPLAN" ]] && cp "$WEEKPLAN" "$WEEKPLAN_SNAPSHOT"
+STRATEGY_FILE="$STRATEGY/docs/Strategy.md"
+STRATEGY_SNAPSHOT="$SNAPSHOT_DIR/strategy.snapshot"
+[[ -f "$STRATEGY_FILE" ]] && cp "$STRATEGY_FILE" "$STRATEGY_SNAPSHOT"
+ACTIVE_WP_FILE="$STRATEGY/current/active-wp.md"
+ACTIVE_WP_SNAPSHOT="$SNAPSHOT_DIR/active-wp.snapshot"
+[[ -f "$ACTIVE_WP_FILE" ]] && cp "$ACTIVE_WP_FILE" "$ACTIVE_WP_SNAPSHOT"
 
 rollback_wp_creation() {
   echo "↩️  Откат: WP-${WP_ID} не создан целиком, отменяю частичные записи" >&2
@@ -253,6 +259,14 @@ rollback_wp_creation() {
     else
       rm -f "$WEEKPLAN"
     fi
+  fi
+  if [[ -f "$STRATEGY_SNAPSHOT" ]]; then
+    cp "$STRATEGY_SNAPSHOT" "$STRATEGY_FILE"
+  fi
+  if [[ -f "$ACTIVE_WP_SNAPSHOT" ]]; then
+    cp "$ACTIVE_WP_SNAPSHOT" "$ACTIVE_WP_FILE"
+  else
+    rm -f "$ACTIVE_WP_FILE"
   fi
 }
 
@@ -513,7 +527,10 @@ with open(weekplan_path, "r", encoding="utf-8") as f:
 header_line = None
 insert_at = None
 for i, line in enumerate(lines):
-    if line.strip().startswith("|---") and i > 0 and "РП" in lines[i - 1] and "Статус" in lines[i - 1]:
+    if not (line.strip().startswith("|---") and i > 0):
+        continue
+    candidate = [c.strip() for c in lines[i - 1].strip().strip("|").split("|")]
+    if "#" in candidate and "РП" in candidate and "Статус" in candidate:
         header_line = lines[i - 1]
         insert_at = i + 1
         break
@@ -571,11 +588,10 @@ echo "5/6 Strategy.md..."
 
 BUDGET_H=$(echo "$BUDGET" | sed 's/[^0-9]//g')
 if [[ -n "$RESULT" && "${BUDGET_H:-0}" -ge 3 ]]; then
-  STRATEGY_FILE="$STRATEGY/docs/Strategy.md"
-  python3 - "$STRATEGY_FILE" "$WP_ID" "$REPO" "$RESULT" <<'PYEOF'
+  if ! python3 - "$STRATEGY_FILE" "$WP_NUM" "$REPO" "$RESULT" <<'PYEOF'
 import sys
 
-strategy_path, wp_id, repo, result = sys.argv[1:5]
+strategy_path, wp_num, repo, result = sys.argv[1:5]
 
 section_anchor = "### РП → Результаты"
 
@@ -583,24 +599,42 @@ with open(strategy_path, "r", encoding="utf-8") as f:
     content = f.read()
 
 if section_anchor not in content:
-    print("   ⚠️  Strategy.md: секция «{}» не найдена — добавить вручную".format(section_anchor))
-    sys.exit(0)
+    print("❌ Strategy.md: секция «{}» не найдена".format(section_anchor), file=sys.stderr)
+    sys.exit(1)
 
 section_start = content.index(section_anchor)
-table_sep = content.find("|---|", section_start)
-if table_sep == -1:
-    print("   ⚠️  Strategy.md: разделитель таблицы не найден в секции — добавить вручную")
-    sys.exit(0)
+section_lines = content[section_start:].splitlines(keepends=True)
+insert_at = None
+cursor = section_start
+for index, line in enumerate(section_lines):
+    if index > 0 and line.startswith("### "):
+        break
+    if line.lstrip().startswith("|"):
+        columns = [c.strip() for c in line.strip().strip("|").split("|")]
+        if {"РП", "Результат", "Статус"}.issubset(columns) and index + 1 < len(section_lines):
+            separator = section_lines[index + 1]
+            if separator.strip().startswith("|---"):
+                insert_at = cursor + len(line) + len(separator)
+                break
+    cursor += len(line)
 
-insert_at = content.index("\n", table_sep) + 1
+if insert_at is None:
+    print("❌ Strategy.md: целевая таблица РП/Результат/Статус не найдена в секции", file=sys.stderr)
+    sys.exit(1)
+
 repo_cell = repo if repo else "—"
-new_row = "| WP-{} | {} | {} | pending |\n".format(wp_id, repo_cell, result)
+new_row = "| WP-{} | {} | {} | pending |\n".format(wp_num, repo_cell, result)
 content = content[:insert_at] + new_row + content[insert_at:]
 
 with open(strategy_path, "w", encoding="utf-8") as f:
     f.write(content)
-print("   ✅ Strategy.md: WP-{} → {} добавлен".format(wp_id, result))
+print("   ✅ Strategy.md: WP-{} → {} добавлен".format(wp_num, result))
 PYEOF
+  then
+    echo "❌ Strategy.md write FAILED — WP-${WP_NUM} не создан" >&2
+    rollback_wp_creation
+    exit 1
+  fi
 elif [[ "${BUDGET_H:-0}" -ge 3 ]]; then
   echo "   ℹ️  РП ≥3h, но --result не задан — добавить маппинг в Strategy.md вручную"
 else
@@ -618,9 +652,13 @@ elif [[ -f "$IWE/FMT-exocortex-template/scripts/build-active-wp.py" ]]; then
 fi
 
 if [[ -n "$BUILD_ACTIVE_WP" ]]; then
-  python3 "$BUILD_ACTIVE_WP" \
-    && echo "   ✅ active-wp.md пересобран" \
-    || echo "   ⚠️  build-active-wp.py завершился с ошибкой — пересобрать вручную" >&2
+  if python3 "$BUILD_ACTIVE_WP"; then
+    echo "   ✅ active-wp.md пересобран"
+  else
+    echo "❌ build-active-wp.py завершился с ошибкой — WP-${WP_NUM} не создан" >&2
+    rollback_wp_creation
+    exit 1
+  fi
 else
   echo "   ⚠️  scripts/build-active-wp.py не найден (искали в \`$STRATEGY/scripts/\` и \`$IWE/FMT-exocortex-template/scripts/\`) — пересобрать вручную" >&2
 fi

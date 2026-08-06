@@ -51,9 +51,17 @@ ALL_STATUSES = ACTIVE_STATUSES | CLOSED_STATUSES
 def norm_status(token: str) -> str:
     return token.replace("\ufe0f", "")
 
-# Строка-РП: `| 312 | P2 | **Название** | 🔄 | repo | 8h |`
-# Done-вариант: `| ~~306~~ | ~~P3~~ | ~~Название~~ | ✅ | ~~repo~~ | ~~4h~~ |`
-ROW_RE = re.compile(r"^\|\s*(?:~~)?(?:\*\*)?(\d{1,4})(?:\*\*)?(?:~~)?\s*\|")
+# WP rows may use either a bare integer or the live personal-registry WP-N form.
+ROW_RE = re.compile(
+    r"^\|\s*(?:~~)?(?:\*\*)?(?:WP-)?(\d{1,4})(?:\*\*)?(?:~~)?\s*\|"
+)
+
+COLUMN_SYNONYMS = {
+    "Приоритет": "P",
+    "Статус": "Ст",
+    "Репозитории": "Репо",
+    "Репозиторий": "Репо",
+}
 
 # Имя файла WP в inbox/archive: WP-NNN-... .md или WP-NNN.md или папка WP-NNN/
 WP_NAME_RE = re.compile(r"^WP-(\d{1,4})(?:[-.].*|/)?$")
@@ -64,21 +72,42 @@ def parse_registry(text: str) -> tuple[list[dict], list[str]]:
     непарсибельные попадают в rows (для orphan-детекции) + в problems (PARSE-WARN)."""
     rows: list[dict] = []
     problems: list[str] = []
+    col_index = None
     for lineno, line in enumerate(text.splitlines(), 1):
+        cols = [c.strip() for c in line.strip().strip("|").split("|")]
+        if cols and cols[0] == "#":
+            col_index = {}
+            for index, name in enumerate(cols):
+                canonical = COLUMN_SYNONYMS.get(name, name)
+                col_index.setdefault(canonical, index)
+            continue
+
         m = ROW_RE.match(line)
         if not m:
             continue
         wp = int(m.group(1))
-        cols = [c.strip() for c in line.strip("|").split("|")]
-        if len(cols) < 6:
+        if col_index is None:
             problems.append(
-                f"WP-{wp} (строка {lineno}): колонок < 6 — строка учтена в реестре, "
-                f"но не попадает в active-wp.md."
+                f"WP-{wp} (строка {lineno}): заголовок таблицы не распознан."
             )
-            cols = cols + [""] * (6 - len(cols))
-        # Очистка от ~~ и пробелов; берём только первый токен, чтобы
-        # принять варианты вида "🔄 Ф4" (статус + пометка фазы).
-        status_raw = cols[3].replace("~~", "").strip()
+            continue
+
+        missing = [name for name in ("#", "Название", "Ст") if name not in col_index]
+        if missing:
+            problems.append(
+                f"WP-{wp} (строка {lineno}): нет обязательных колонок {missing}."
+            )
+            continue
+
+        def cell(name: str, default: str = "—") -> str:
+            index = col_index.get(name)
+            if index is None or index >= len(cols):
+                return default
+            value = cols[index].strip()
+            return value or default
+
+        # Keep only the first status token so forms such as "🔄 F4" remain valid.
+        status_raw = cell("Ст", "").replace("~~", "").strip()
         token = status_raw.split()[0] if status_raw else ""
         status = norm_status(token)
         if status not in ALL_STATUSES:
@@ -88,24 +117,29 @@ def parse_registry(text: str) -> tuple[list[dict], list[str]]:
             )
         rows.append({
             "wp": wp,
-            "project": cols[1].replace("~~", "").strip(),
-            "name": cols[2].strip(),
+            "wp_display": cell("#"),
+            "project": cell("P").replace("~~", "").strip(),
+            "name": cell("Название"),
             "status": status,
             "status_display": token,
-            "repo": cols[4].strip(),
-            "budget": cols[5].strip(),
+            "repo": cell("Репо", cell("Активация")),
+            "budget": cell("Бюджет"),
             "raw": line,
         })
     return rows, problems
 
 
-def clean_status_in_row(raw: str, status: str) -> str:
-    """Заменяет содержимое колонки «Ст» на очищенный статус и обрезает лишние колонки."""
-    parts = raw.split("|")
-    if len(parts) >= 6:
-        parts[4] = f" {status} "
-        parts = parts[:7]
-    return "|".join(parts) + "|"
+def render_row(row: dict) -> str:
+    """Render every supported source schema into the canonical six-column view."""
+    cells = [
+        row["wp_display"],
+        row["project"],
+        row["name"],
+        row["status_display"],
+        row["repo"],
+        row["budget"],
+    ]
+    return "| " + " | ".join(cells) + " |"
 
 
 def render(rows: list[dict]) -> str:
@@ -126,7 +160,7 @@ def render(rows: list[dict]) -> str:
         out = ["| # | P | Название | Ст | Репо | Бюджет |",
                "|---:|---|------------------|:--:|------------------|------:|"]
         for r in items:
-            out.append(clean_status_in_row(r["raw"], r["status_display"]))
+            out.append(render_row(r))
         return "\n".join(out) + "\n"
 
     lines = [
