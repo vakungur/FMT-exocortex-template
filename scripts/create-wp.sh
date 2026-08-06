@@ -388,21 +388,14 @@ if insert_at is None:
     print("❌ Не найден заголовок таблицы REGISTRY", file=sys.stderr)
     sys.exit(1)
 
-# Схема-гард (issue #263, расширено issue #276): раньше писатель требовал ровно
-# 6 колонок в заголовке — REGISTRY с легитимно другим числом/порядком колонок
-# (та же семантика, доп. колонка сверху) блокировался целиком, хотя читатель
-# (check-wp-format.py::find_column_indices) уже толерантен к такой вариации.
-# Вместо счёта колонок — строим {имя: индекс} по фактическому заголовку и
-# проверяем наличие 6 канонических имён, не их порядок/количество.
+# The registry is user-owned and has several legitimate schemas in the field:
+# the live compact schema (#, title, status, activation), the five-column
+# strategy skeleton, and the newer six-column seed. Resolve columns by meaning
+# and require only the three fields that every WP registry must carry. Optional
+# metadata is written when the corresponding column exists; no migration or
+# destructive rewrite of existing rows is needed.
 header_cols = [c.strip() for c in header_line.strip().strip("|").split("|")]
-CANONICAL_NAMES = ["#", "P", "Название", "Ст", "Репо", "Бюджет"]
-# issue #297: вендорский skeleton (templates/strategy-skeleton/docs/WP-REGISTRY.md)
-# пишет полные русские имена («Приоритет», «Статус», «Репозитории»), а не короткие
-# канонические («P», «Ст», «Репо») — та же семантика, другое написание. Раньше
-# сверка требовала буквального совпадения и падала даже на только что созданном
-# из вендорского skeleton реестре. Синонимы резолвятся к канонической колонке до
-# проверки — те же строки find_column_indices() в check-wp-format.py уже читают
-# оба варианта позиционным fallback'ом, здесь та же терпимость явным списком.
+REQUIRED_NAMES = ["#", "Название", "Ст"]
 COLUMN_SYNONYMS = {
     "Приоритет": "P",
     "Статус": "Ст",
@@ -413,7 +406,7 @@ col_index = {}
 for i, name in enumerate(header_cols):
     canonical = COLUMN_SYNONYMS.get(name, name)
     col_index.setdefault(canonical, i)
-missing_names = [name for name in CANONICAL_NAMES if name not in col_index]
+missing_names = [name for name in REQUIRED_NAMES if name not in col_index]
 if missing_names:
     print(
         "❌ WP-REGISTRY.md: заголовок таблицы не содержит обязательных колонок {}.".format(
@@ -423,7 +416,7 @@ if missing_names:
     )
     print("   Заголовок: {}".format(header_line.strip()), file=sys.stderr)
     print(
-        "   create-wp.sh требует колонки # | P | Название | Ст | Репо | Бюджет —",
+        "   create-wp.sh требует семантические колонки # | Название | Статус —",
         file=sys.stderr,
     )
     print(
@@ -431,20 +424,37 @@ if missing_names:
         file=sys.stderr,
     )
     print(
-        "   Приведите заголовок REGISTRY к схеме с этими 6 колонками (порядок и",
+        "   Добавьте эти колонки в REGISTRY (порядок и",
         file=sys.stderr,
     )
     print("   доп. колонки — свободные), затем повторите создание РП.", file=sys.stderr)
     sys.exit(1)
 
 repo_cell = repo if repo else "{}/inbox/WP-{}/".format(gov_repo, wp_id)
+
+# Preserve the established identifier style of the table. Older personal
+# registries use WP-N in the first cell; fresh templates use a bare integer.
+wp_cell = wp_num
+for line in lines[insert_at:]:
+    if not line.lstrip().startswith("|"):
+        break
+    cells = [c.strip().strip("*~") for c in line.strip().strip("|").split("|")]
+    if cells and cells[0].startswith("WP-") and cells[0][3:].isdigit():
+        wp_cell = "WP-{}".format(wp_num)
+        break
+
+activation_cell = "on-demand"
+if "Репо" not in col_index:
+    activation_cell = "on-demand → {}".format(repo_cell)
+
 values_by_name = {
-    "#": wp_num,
+    "#": wp_cell,
     "P": priority,
     "Название": "**{}**".format(title),
     "Ст": "⏳",
     "Репо": repo_cell,
     "Бюджет": budget,
+    "Активация": activation_cell,
     # WP-505: optional column; silently skipped when the header lacks it
     "Ставка": stake,
 }
@@ -482,9 +492,9 @@ echo "4/6 WeekPlan..."
 # WEEKPLAN уже найден выше (снимок для отката, issue WP-507 про формат имени файла
 # применён там же) — здесь используется тот же путь, не ищем повторно.
 if [[ -n "$WEEKPLAN" ]]; then
-  if ! python3 - "$WEEKPLAN" "$WP_NUM" "$TITLE" "$PRIORITY" "$BUDGET" <<'PYEOF'
+  if ! python3 - "$WEEKPLAN" "$WP_NUM" "$TITLE" "$PRIORITY" "$BUDGET" "$REPO" "$GOV_REPO" <<'PYEOF'
 import sys, re
-weekplan_path, wp_num, title, priority, budget = sys.argv[1:6]
+weekplan_path, wp_num, title, priority, budget, repo, gov_repo = sys.argv[1:8]
 
 # Маппинг приоритета → светофор
 flag_map = {"P1": "🔴", "P2": "🟡", "P3": "🟢", "P4": "⚪", "P5": "⚪"}
@@ -512,14 +522,29 @@ if insert_at is None:
     print("   ⚠️  WeekPlan: таблица недели (заголовок РП/Статус) не найдена — добавить вручную", file=sys.stderr)
 else:
     header_cols = [c.strip() for c in header_line.strip().strip("|").split("|")]
+    wp_cell = wp_num
+    number_idx = header_cols.index("#") if "#" in header_cols else None
+    if number_idx is not None:
+        for line in lines[insert_at:]:
+            if not line.lstrip().startswith("|"):
+                break
+            cells = [c.strip().strip("*~") for c in line.strip().strip("|").split("|")]
+            if number_idx < len(cells) and cells[number_idx].startswith("WP-"):
+                suffix = cells[number_idx][3:]
+                if suffix.isdigit():
+                    wp_cell = "WP-{}".format(wp_num)
+                    break
     values_by_name = {
         "🚦": flag,
-        "#": wp_num,
+        "#": wp_cell,
         "РП": "**{}** — [описание]".format(title),
         "h": h_val,
+        "Бюджет": budget,
         "Источник": "—",
         "P": priority,
         "Статус": "pending",
+        "Дедлайн": "—",
+        "Репо": repo or gov_repo,
         "Результат": "[заполнить]",
     }
     row_cells = ["—"] * len(header_cols)
